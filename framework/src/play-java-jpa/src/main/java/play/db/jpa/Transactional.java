@@ -17,4 +17,5 @@ public @interface Transactional {
     String value() default "default";
     boolean readOnly() default false;
     boolean storeEmInHttpContext() default true;
+    boolean keepTransactionOpen() default false;
 }
