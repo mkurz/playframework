@@ -7,6 +7,7 @@ import play.inject.ApplicationLifecycle;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -169,6 +170,42 @@ public class DefaultJPAApi implements JPAApi {
     }
 
     /**
+     * Run a block of code with a newly created EntityManager.
+     *
+     * @param block Block of code to execute
+     */
+    @Override
+    public void withTransaction(Consumer<EntityManager> block) {
+        withTransaction("default", block);
+    }
+
+    /**
+     * Run a block of code with a newly created EntityManager for the named Persistence Unit.
+     *
+     * @param name The persistence unit name
+     * @param block Block of code to execute
+     */
+    @Override
+    public void withTransaction(String name, Consumer<EntityManager> block) {
+        withTransaction(name, false, block);
+    }
+
+    /**
+     * Run a block of code with a newly created EntityManager for the named Persistence Unit.
+     *
+     * @param name The persistence unit name
+     * @param readOnly Is the transaction read-only?
+     * @param block Block of code to execute
+     */
+    @Override
+    public void withTransaction(String name, boolean readOnly, Consumer<EntityManager> block) {
+        withTransaction("default", readOnly, (em) -> {
+            block.accept(em);
+            return null;
+        });
+    }
+
+    /**
      * Run a block of code in a JPA transaction.
      *
      * @param block Block of code to execute
@@ -186,7 +223,7 @@ public class DefaultJPAApi implements JPAApi {
      *
      * @param block Block of code to execute
      *
-     * @deprecated Use {@link #withTransaction(Function)}
+     * @deprecated Use {@link #withTransaction(Consumer)}
      */
     @Override
     @Deprecated

@@ -91,12 +91,19 @@ It is likely that you need to run transactions that are not coupled with request
 * `JPAApi.withTransaction(Function<EntityManager, T>)`
 * `JPAApi.withTransaction(String, Function<EntityManager, T>)`
 * `JPAApi.withTransaction(String, boolean, Function<EntityManager, T>)`
+* `JPAApi.withTransaction(Consumer<EntityManager>)`
+* `JPAApi.withTransaction(String, Consumer<EntityManager>)`
+* `JPAApi.withTransaction(String, boolean, Consumer<EntityManager>)`
 
 ### Examples:
 
 Using `JPAApi.withTransaction(Function<EntityManager, T>)`:
 
 @[jpa-withTransaction-function](code/controllers/JPAController.java)
+
+Using `JPAApi.withTransaction(Consumer)` to run a batch update:
+
+@[jpa-withTransaction-consumer](code/controllers/JPAController.java)
 
 ## Enabling Play database evolutions
 
