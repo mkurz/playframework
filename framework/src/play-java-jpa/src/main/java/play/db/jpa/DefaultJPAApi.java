@@ -112,18 +112,24 @@ public class DefaultJPAApi implements JPAApi {
         return withTransaction(name, readOnly, false, block);
     }
     
+    @Override
+    public <T> T withTransaction(String name, boolean readOnly, boolean storeEmInHttpContext, Function<EntityManager, T> block) {
+        return withTransaction(name, readOnly, storeEmInHttpContext, false, block);
+    }
+    
     /**
      * Run a block of code with a newly created EntityManager for the named Persistence Unit.
      *
      * @param name The persistence unit name
      * @param readOnly Is the transaction read-only?
      * @param storeEmInHttpContext Store the entity manager in the Http.Context?
+     * @param keepTransactionOpen Don't commit nor rollback transaction. Leaves the entity manager in the Http.Context if storeEmInHttpContext is true.
      * @param block Block of code to execute
      * @param <T> type of result
      * @return code execution result
      */
     @Override
-    public <T> T withTransaction(String name, boolean readOnly, boolean storeEmInHttpContext, Function<EntityManager, T> block) {
+    public <T> T withTransaction(String name, boolean readOnly, boolean storeEmInHttpContext, boolean keepTransactionOpen, Function<EntityManager, T> block) {
         EntityManager entityManager = null;
         EntityTransaction tx = null;
 
@@ -145,27 +151,32 @@ public class DefaultJPAApi implements JPAApi {
 
             T result = block.apply(entityManager);
 
-            if (tx != null) {
-                if(tx.getRollbackOnly()) {
-                    tx.rollback();
-                } else {
-                    tx.commit();
+            if(!keepTransactionOpen) {
+                if (tx != null) {
+                    if(tx.getRollbackOnly()) {
+                        tx.rollback();
+                    } else {
+                        tx.commit();
+                    }
                 }
             }
 
             return result;
 
         } catch (Throwable t) {
+            keepTransactionOpen = false;
             if (tx != null) {
                 try { tx.rollback(); } catch (Throwable e) {}
             }
             throw t;
         } finally {
-            if(storeEmInHttpContext) {
-                JPAEntityManagerContext.pop();
-            }
-            if (entityManager != null) {
-                entityManager.close();
+            if(!keepTransactionOpen) {
+                if(storeEmInHttpContext) {
+                    JPAEntityManagerContext.pop();
+                }
+                if (entityManager != null) {
+                    entityManager.close();
+                }
             }
         }
     }

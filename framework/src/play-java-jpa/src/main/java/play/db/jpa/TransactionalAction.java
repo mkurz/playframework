@@ -27,6 +27,7 @@ public class TransactionalAction extends Action<Transactional> {
             configuration.value(),
             configuration.readOnly(),
             configuration.storeEmInHttpContext(),
+            configuration.keepTransactionOpen(),
             (em) -> delegate.call(ctx)
         );
     }
