@@ -8,7 +8,6 @@ import play.inject.ApplicationLifecycle;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
@@ -24,11 +23,8 @@ public class DefaultJPAApi implements JPAApi {
 
     private final Map<String, EntityManagerFactory> emfs = new HashMap<>();
 
-    private final JPAEntityManagerContext entityManagerContext;
-
-    public DefaultJPAApi(JPAConfig jpaConfig, JPAEntityManagerContext entityManagerContext) {
+    public DefaultJPAApi(JPAConfig jpaConfig) {
         this.jpaConfig = jpaConfig;
-        this.entityManagerContext = entityManagerContext;
     }
 
     @Singleton
@@ -36,9 +32,9 @@ public class DefaultJPAApi implements JPAApi {
         private final JPAApi jpaApi;
 
         @Inject
-        public JPAApiProvider(JPAConfig jpaConfig, JPAEntityManagerContext context, ApplicationLifecycle lifecycle) {
+        public JPAApiProvider(JPAConfig jpaConfig, ApplicationLifecycle lifecycle) {
             // dependency on db api ensures that the databases are initialised
-            jpaApi = new DefaultJPAApi(jpaConfig, context);
+            jpaApi = new DefaultJPAApi(jpaConfig);
             lifecycle.addStopHook(() -> {
                 jpaApi.shutdown();
                 return CompletableFuture.completedFuture(null);
@@ -75,19 +71,6 @@ public class DefaultJPAApi implements JPAApi {
             return null;
         }
         return emf.createEntityManager();
-    }
-
-    /**
-     * Get the EntityManager for a particular persistence unit for this thread.
-     *
-     * @return EntityManager for the specified persistence unit name
-     *
-     * @deprecated The EntityManager is supplied as lambda parameter instead when using {@link #withTransaction(Function)}
-     */
-    @Override
-    @Deprecated
-    public EntityManager em() {
-        return entityManagerContext.em();
     }
 
     /**
@@ -136,7 +119,7 @@ public class DefaultJPAApi implements JPAApi {
                 throw new RuntimeException("Could not create JPA entity manager for '" + name + "'");
             }
 
-            entityManagerContext.push(entityManager, true);
+            JPAEntityManagerContext.push(entityManager);
 
             if (!readOnly) {
                 tx = entityManager.getTransaction();
@@ -161,61 +144,11 @@ public class DefaultJPAApi implements JPAApi {
             }
             throw t;
         } finally {
-            entityManagerContext.pop(true);
+        	JPAEntityManagerContext.pop();
             if (entityManager != null) {
                 entityManager.close();
             }
         }
-    }
-
-    /**
-     * Run a block of code in a JPA transaction.
-     *
-     * @param block Block of code to execute
-     *
-     * @deprecated Use {@link #withTransaction(Function)}
-     */
-    @Override
-    @Deprecated
-    public <T> T withTransaction(Supplier<T> block) {
-        return withTransaction("default", false, block);
-    }
-
-    /**
-     * Run a block of code in a JPA transaction.
-     *
-     * @param block Block of code to execute
-     *
-     * @deprecated Use {@link #withTransaction(Function)}
-     */
-    @Override
-    @Deprecated
-    public void withTransaction(final Runnable block) {
-        try {
-            withTransaction("default", false, () -> {
-                block.run();
-                return null;
-            });
-        } catch (Throwable t) {
-            throw new RuntimeException("JPA transaction failed", t);
-        }
-    }
-
-    /**
-     * Run a block of code in a JPA transaction.
-     *
-     * @param name The persistence unit name
-     * @param readOnly Is the transaction read-only?
-     * @param block Block of code to execute
-     *
-     * @deprecated Use {@link #withTransaction(String, boolean, Function)}
-     */
-    @Override
-    @Deprecated
-    public <T> T withTransaction(String name, boolean readOnly, Supplier<T> block) {
-        return withTransaction(name, readOnly, entityManager -> {
-            return block.get();
-        });
     }
 
     /**
