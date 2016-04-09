@@ -26,6 +26,7 @@ public class TransactionalAction extends Action<Transactional> {
         return jpaApi.withTransaction(
             configuration.value(),
             configuration.readOnly(),
+            configuration.storeEmInHttpContext(),
             (em) -> delegate.call(ctx)
         );
     }

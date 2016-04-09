@@ -109,6 +109,21 @@ public class DefaultJPAApi implements JPAApi {
      */
     @Override
     public <T> T withTransaction(String name, boolean readOnly, Function<EntityManager, T> block) {
+        return withTransaction(name, readOnly, false, block);
+    }
+    
+    /**
+     * Run a block of code with a newly created EntityManager for the named Persistence Unit.
+     *
+     * @param name The persistence unit name
+     * @param readOnly Is the transaction read-only?
+     * @param storeEmInHttpContext Store the entity manager in the Http.Context?
+     * @param block Block of code to execute
+     * @param <T> type of result
+     * @return code execution result
+     */
+    @Override
+    public <T> T withTransaction(String name, boolean readOnly, boolean storeEmInHttpContext, Function<EntityManager, T> block) {
         EntityManager entityManager = null;
         EntityTransaction tx = null;
 
@@ -119,7 +134,9 @@ public class DefaultJPAApi implements JPAApi {
                 throw new RuntimeException("Could not create JPA entity manager for '" + name + "'");
             }
 
-            JPAEntityManagerContext.push(entityManager);
+            if(storeEmInHttpContext) {
+                JPAEntityManagerContext.push(entityManager);
+            }
 
             if (!readOnly) {
                 tx = entityManager.getTransaction();
@@ -144,7 +161,9 @@ public class DefaultJPAApi implements JPAApi {
             }
             throw t;
         } finally {
-        	JPAEntityManagerContext.pop();
+            if(storeEmInHttpContext) {
+                JPAEntityManagerContext.pop();
+            }
             if (entityManager != null) {
                 entityManager.close();
             }
