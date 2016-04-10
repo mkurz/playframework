@@ -152,7 +152,7 @@ public class DefaultJPAApi implements JPAApi {
             T result = block.apply(entityManager);
 
             if(!keepTransactionOpen) {
-                if (tx != null) {
+                if (tx != null && tx.isActive()) {
                     if(tx.getRollbackOnly()) {
                         tx.rollback();
                     } else {
@@ -165,16 +165,19 @@ public class DefaultJPAApi implements JPAApi {
 
         } catch (Throwable t) {
             keepTransactionOpen = false;
-            if (tx != null) {
+            if (tx != null && tx.isActive()) {
                 try { tx.rollback(); } catch (Throwable e) {}
             }
             throw t;
         } finally {
             if(!keepTransactionOpen) {
                 if(storeEmInHttpContext) {
-                    JPAEntityManagerContext.pop();
+                    final Deque<EntityManager> ems = JPAEntityManagerContext.emStack();
+                    if(ems.contains(entityManager)) { // just in case the user removed it from the stack already
+                        ems.remove(entityManager);
+                    }
                 }
-                if (entityManager != null) {
+                if (entityManager != null && entityManager.isOpen()) {  // check if open - just in case the user closed it already
                     entityManager.close();
                 }
             }
