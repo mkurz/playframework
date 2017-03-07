@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.inject.guice
 
 import play.api.{ Application, ApplicationLoader, OptionalSourceMapper }
-import play.api.inject.bind
+import play.api.inject.{ ApplicationLifecycle, DefaultApplicationLifecycle, bind }
 import play.core.WebCommands
 
 /**
@@ -50,6 +50,7 @@ object GuiceApplicationLoader {
   def defaultOverrides(context: ApplicationLoader.Context): Seq[GuiceableModule] = {
     Seq(
       bind[OptionalSourceMapper] to new OptionalSourceMapper(context.sourceMapper),
-      bind[WebCommands] to context.webCommands)
+      bind[WebCommands] to context.webCommands,
+      bind[DefaultApplicationLifecycle] to context.lifecycle)
   }
 }

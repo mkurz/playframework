@@ -1,18 +1,19 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.server;
 
 import play.Mode;
+import play.api.BuiltInComponents;
 import play.routing.Router;
 import play.core.j.JavaModeConverter;
 import play.core.server.JavaServerHelper;
-import scala.Int;
 
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 import scala.compat.java8.OptionConverters;
 
@@ -28,6 +29,13 @@ public class Server {
     }
 
     /**
+     * @return the underlying server.
+     */
+    public play.core.server.Server underlying() {
+        return this.server;
+    }
+
+    /**
      * Stop the server.
      */
     public void stop() {
@@ -37,11 +45,12 @@ public class Server {
     /**
      * Get the HTTP port the server is running on.
      *
-     * throws IllegalStateException if it is not running on the HTTP protocol
+     * @throws IllegalStateException if it is not running on the HTTP protocol
+     * @return the port number.
      */
     public int httpPort() {
         if (server.httpPort().isDefined()) {
-            return Int.unbox(server.httpPort().get());
+            return (Integer)server.httpPort().get();
         } else {
             throw new IllegalStateException("Server has no HTTP port. Try starting it with \"new Server.Builder().http(<port num>)\"?");
         }
@@ -50,11 +59,12 @@ public class Server {
     /**
      * Get the HTTPS port the server is running on.
      *
-     * throws IllegalStateException if it is not running on the HTTPS protocol.
+     * @throws IllegalStateException if it is not running on the HTTPS protocol.
+     * @return the port number.
      */
     public int httpsPort() {
         if (server.httpsPort().isDefined()) {
-            return Int.unbox(server.httpsPort().get());
+            return (Integer)server.httpsPort().get();
         } else {
             throw new IllegalStateException("Server has no HTTPS port. Try starting it with \"new Server.Builder.https(<port num>)\"?");
         }
@@ -62,6 +72,7 @@ public class Server {
 
     /**
      * Get the address the server is running on.
+     * @return the address
      */
     public InetSocketAddress mainAddress() {
         return server.mainAddress();
@@ -77,9 +88,27 @@ public class Server {
      *
      * @param router The router for the server to serve.
      * @return The running server.
+     *
+     * @deprecated As of 2.6.0. Use {@link #forRouter(Function)}
      */
+    @Deprecated
     public static Server forRouter(Router router) {
-        return forRouter(router, Mode.TEST, 0);
+        return forRouter((components) -> router);
+    }
+
+    /**
+     * Create a server for the given router.
+     * <p>
+     * The server will be running on a randomly selected ephemeral port, which can be checked using the httpPort
+     * property.
+     * <p>
+     * The server will be running in TEST mode.
+     *
+     * @param block The block that creates the router.
+     * @return The running server.
+     */
+    public static Server forRouter(Function<BuiltInComponents, Router> block) {
+        return forRouter(Mode.TEST, 0, block);
     }
 
     /**
@@ -91,9 +120,28 @@ public class Server {
      * @param router The router for the server to serve.
      * @param mode   The mode the server will run on.
      * @return The running server.
+     *
+     * @deprecated As of 2.6.0. Use {@link #forRouter(Mode, Function)}
      */
+    @Deprecated
     public static Server forRouter(Router router, Mode mode) {
         return forRouter(router, mode, 0);
+    }
+
+    /**
+     * Create a server for the given router.
+     * <p>
+     * The server will be running on a randomly selected ephemeral port, which can be checked using the httpPort
+     * property.
+     * <p>
+     * The server will be running in TEST mode.
+     *
+     * @param mode   The mode the server will run on.
+     * @param block The block that creates the router.
+     * @return The running server.
+     */
+    public static Server forRouter(Mode mode, Function<BuiltInComponents, Router> block) {
+        return forRouter(mode, 0, block);
     }
 
     /**
@@ -104,9 +152,28 @@ public class Server {
      * @param router The router for the server to serve.
      * @param port   The port the server will run on.
      * @return The running server.
+     *
+     * @deprecated As of 2.6.0. Use {@link #forRouter(int, Function)}
      */
+    @Deprecated
     public static Server forRouter(Router router, int port) {
         return forRouter(router, Mode.TEST, port);
+    }
+
+    /**
+     * Create a server for the given router.
+     * <p>
+     * The server will be running on a randomly selected ephemeral port, which can be checked using the httpPort
+     * property.
+     * <p>
+     * The server will be running in TEST mode.
+     *
+     * @param port   The port the server will run on.
+     * @param block The block that creates the router.
+     * @return The running server.
+     */
+    public static Server forRouter(int port, Function<BuiltInComponents, Router> block) {
+        return forRouter(Mode.TEST, port, block);
     }
 
     /**
@@ -116,12 +183,28 @@ public class Server {
      * @param mode   The mode the server will run on.
      * @param port   The port the server will run on.
      * @return The running server.
+     *
+     * @deprecated As of 2.6.0. Use {@link #forRouter(Mode, int, Function)}
      */
+    @Deprecated
     public static Server forRouter(Router router, Mode mode, int port) {
+        return forRouter(mode, port, (components) -> router);
+    }
+
+    /**
+     * Create a server for the router returned by the given block.
+     *
+     * @param block  The block which creates a router.
+     * @param mode   The mode the server will run on.
+     * @param port   The port the server will run on.
+     *
+     * @return The running server.
+     */
+    public static Server forRouter(Mode mode, int port, Function<BuiltInComponents, Router> block) {
         return new Builder()
                 .mode(mode)
                 .http(port)
-                .build(router);
+                .build(block);
     }
 
     /**
@@ -171,6 +254,7 @@ public class Server {
          * Passing 0 will make it serve on a random available port.
          *
          * @param port the port on which to serve http traffic
+         * @return the builder with port set.
          */
         public Builder http(int port) {
             return _protocol(Protocol.HTTP, port);
@@ -182,6 +266,7 @@ public class Server {
          * Passing 0 will make it serve on a random available port.
          *
          * @param port the port on which to serve ssl traffic
+         * @return the builder with port set.
          */
         public Builder https(int port) {
             return _protocol(Protocol.HTTPS, port);
@@ -189,6 +274,9 @@ public class Server {
 
         /**
          * Set the mode the server should be run on (defaults to TEST)
+         *
+         * @param mode the Play mode (dev, prod, test)
+         * @return the builder with Server.Config set to mode.
          */
         public Builder mode(Mode mode) {
             _config = new Server.Config(_config.ports(), mode);
@@ -198,20 +286,30 @@ public class Server {
         /**
          * Build the server and begin serving the provided routes as configured.
          *
+         * @param router the router to use.
          * @return the actively running server.
          */
-        public Server build(Router router) {
+        public Server build(final Router router) {
+            return build((components) -> router);
+        }
+
+        /**
+         * Build the server and begin serving the provided routes as configured.
+         *
+         * @param block the router to use.
+         * @return the actively running server.
+         */
+        public Server build(Function<BuiltInComponents, Router> block) {
             Server.Config config = _buildConfig();
             return new Server(
                     JavaServerHelper.forRouter(
-                            router.asScala(),
                             JavaModeConverter.asScalaMode(config.mode()),
                             OptionConverters.toScala(config.maybeHttpPort()),
-                            OptionConverters.toScala(config.maybeHttpsPort())
+                            OptionConverters.toScala(config.maybeHttpsPort()),
+                            (components) -> block.apply(components).asScala()
                     )
             );
         }
-
 
         //
         // Private members

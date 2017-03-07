@@ -1,24 +1,34 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{ Files, Path, Paths }
+import java.time.{ LocalDateTime, ZoneOffset }
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.joda.time.{ DateTime, DateTimeZone }
+import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.Sink
 import org.specs2.mutable._
 import play.api.http.HeaderNames._
+import play.api.http._
 import play.api.http.Status._
-import play.api.i18n.{ DefaultLangs, DefaultMessagesApi }
-import play.api.{ Configuration, Environment, Play }
+import play.api.i18n._
+import play.api.{ Application, Configuration, Environment, Play }
 import play.core.test._
 
-object ResultsSpec extends Specification {
+import scala.concurrent.Await
+import scala.concurrent.duration._
+
+class ResultsSpec extends Specification {
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   import play.api.mvc.Results._
+
+  implicit val fileMimeTypes: FileMimeTypes = new DefaultFileMimeTypesProvider(FileMimeTypesConfiguration()).get
 
   val fileCounter = new AtomicInteger(1)
   def freshFileName: String = s"test${fileCounter.getAndIncrement}.tmp"
@@ -41,21 +51,30 @@ object ResultsSpec extends Specification {
     } finally Files.delete(file)
   }
 
+  lazy val cookieHeaderEncoding = new DefaultCookieHeaderEncoding()
+  lazy val sessionCookieBaker = new DefaultSessionCookieBaker()
+  lazy val flashCookieBaker = new DefaultFlashCookieBaker()
+
+  // bake the results cookies into the headers
+  def bake(result: Result): Result = {
+    result.bakeCookies(cookieHeaderEncoding, sessionCookieBaker, flashCookieBaker)
+  }
+
   "Result" should {
 
     "have status" in {
-      val Result(ResponseHeader(status, _, _), _) = Ok("hello")
+      val Result(ResponseHeader(status, _, _), _, _, _, _) = Ok("hello")
       status must be_==(200)
     }
 
     "support Content-Type overriding" in {
-      val Result(ResponseHeader(_, _, _), body) = Ok("hello").as("text/html")
+      val Result(ResponseHeader(_, _, _), body, _, _, _) = Ok("hello").as("text/html")
 
       body.contentType must beSome("text/html")
     }
 
     "support headers manipulation" in {
-      val Result(ResponseHeader(_, headers, _), _) =
+      val Result(ResponseHeader(_, headers, _), _, _, _, _) =
         Ok("hello").as("text/html").withHeaders("Set-Cookie" -> "yes", "X-YOP" -> "1", "X-Yop" -> "2")
 
       headers.size must_== 2
@@ -65,9 +84,9 @@ object ResultsSpec extends Specification {
     }
 
     "support date headers manipulation" in {
-      val Result(ResponseHeader(_, headers, _), _) =
+      val Result(ResponseHeader(_, headers, _), _, _, _, _) =
         Ok("hello").as("text/html").withDateHeaders(DATE ->
-          new DateTime(2015, 4, 1, 0, 0).withZoneRetainFields(DateTimeZone.UTC))
+          LocalDateTime.of(2015, 4, 1, 0, 0).atZone(ZoneOffset.UTC))
       headers must havePair(DATE -> "Wed, 01 Apr 2015 00:00:00 GMT")
     }
 
@@ -87,11 +106,12 @@ object ResultsSpec extends Specification {
       newDecodedCookies("preferences").value must be_==("blue")
       newDecodedCookies("lang").value must be_==("fr")
 
-      val Result(ResponseHeader(_, headers, _), _) =
+      val Result(ResponseHeader(_, headers, _), _, _, _, _) = bake {
         Ok("hello").as("text/html")
           .withCookies(Cookie("session", "items"), Cookie("preferences", "blue"))
           .withCookies(Cookie("lang", "fr"), Cookie("session", "items2"))
           .discardingCookies(DiscardingCookie("logged"))
+      }
 
       val setCookies = Cookies.decodeSetCookieHeader(headers("Set-Cookie")).map(c => c.name -> c).toMap
       setCookies must haveSize(4)
@@ -99,7 +119,7 @@ object ResultsSpec extends Specification {
       setCookies("session").maxAge must beNone
       setCookies("preferences").value must be_==("blue")
       setCookies("lang").value must be_==("fr")
-      setCookies("logged").maxAge must beSome(0)
+      setCookies("logged").maxAge must beSome(Cookie.DiscardedMaxAge)
     }
 
     "provide convenience method for setting cookie header" in withApplication {
@@ -107,7 +127,7 @@ object ResultsSpec extends Specification {
         cookies1: List[Cookie],
         cookies2: List[Cookie],
         expected: Option[Set[Cookie]]) = {
-        val result = Ok("hello").withCookies(cookies1: _*).withCookies(cookies2: _*)
+        val result = bake { Ok("hello").withCookies(cookies1: _*).withCookies(cookies2: _*) }
         result.header.headers.get("Set-Cookie").map(Cookies.decodeSetCookieHeader(_).to[Set]) must_== expected
       }
       val preferencesCookie = Cookie("preferences", "blue")
@@ -138,19 +158,20 @@ object ResultsSpec extends Specification {
         Some(Set(preferencesCookie, sessionCookie)))
     }
 
-    "support clearing a language cookie using clearingLang" in withApplication {
-      implicit val messagesApi = new DefaultMessagesApi(Environment.simple(), Configuration.reference, new DefaultLangs(Configuration.reference))
-      val cookie = Cookies.decodeSetCookieHeader(Ok.clearingLang.header.headers("Set-Cookie")).head
+    "support clearing a language cookie using clearingLang" in withApplication { app: Application =>
+      implicit val messagesApi = app.injector.instanceOf[MessagesApi]
+      val cookie = Cookies.decodeSetCookieHeader(bake(Ok.clearingLang).header.headers("Set-Cookie")).head
       cookie.name must_== Play.langCookieName
       cookie.value must_== ""
     }
 
     "allow discarding a cookie by deprecated names method" in withApplication {
-      Cookies.decodeSetCookieHeader(Ok.discardingCookies(DiscardingCookie("blah")).header.headers("Set-Cookie")).head.name must_== "blah"
+      Cookies.decodeSetCookieHeader(bake(Ok.discardingCookies(DiscardingCookie("blah"))).header.headers("Set-Cookie")).head.name must_== "blah"
     }
 
     "allow discarding multiple cookies by deprecated names method" in withApplication {
-      val cookies = Cookies.decodeSetCookieHeader(Ok.discardingCookies(DiscardingCookie("foo"), DiscardingCookie("bar")).header.headers("Set-Cookie")).map(_.name)
+      val baked = bake { Ok.discardingCookies(DiscardingCookie("foo"), DiscardingCookie("bar")) }
+      val cookies = Cookies.decodeSetCookieHeader(baked.header.headers("Set-Cookie")).map(_.name)
       cookies must containTheSameElementsAs(Seq("foo", "bar"))
     }
 
@@ -232,12 +253,46 @@ object ResultsSpec extends Specification {
       rh.body.contentLength must beSome(content.length)
     }
 
+    "sendFile should honor onClose" in withFile { (file, fileName) =>
+      implicit val system = ActorSystem()
+      implicit val mat = ActorMaterializer()
+      try {
+        var fileSent = false
+        val res = Results.Ok.sendFile(file, onClose = () => {
+          fileSent = true
+        })
+
+        // Actually we need to wait until the Stream completes
+        Await.ready(res.body.dataStream.runWith(Sink.ignore), 60.seconds)
+        // and then we need to wait until the onClose completes
+        Thread.sleep(500)
+
+        fileSent must be_==(true)
+      } finally {
+        Await.ready(system.terminate(), 60.seconds)
+      }
+    }
+
     "support redirects for reverse routed calls" in {
       Results.Redirect(Call("GET", "/path")).header must_== Status(303).withHeaders(LOCATION -> "/path").header
     }
 
     "support redirects for reverse routed calls with custom statuses" in {
       Results.Redirect(Call("GET", "/path"), TEMPORARY_REDIRECT).header must_== Status(TEMPORARY_REDIRECT).withHeaders(LOCATION -> "/path").header
+    }
+
+    "redirect with a fragment" in {
+      val url = "http://host:port/path?k1=v1&k2=v2"
+      val fragment = "my-fragment"
+      val expectedLocation = url + "#" + fragment
+      Results.Redirect(Call("GET", url, fragment)).header.headers.get(LOCATION) must_== Option(expectedLocation)
+    }
+
+    "redirect with a fragment and status" in {
+      val url = "http://host:port/path?k1=v1&k2=v2"
+      val fragment = "my-fragment"
+      val expectedLocation = url + "#" + fragment
+      Results.Redirect(Call("GET", url, fragment), 301).header.headers.get(LOCATION) must_== Option(expectedLocation)
     }
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.j
 
@@ -11,11 +11,12 @@ import play.api.inject.Injector
 
 import scala.compat.java8.FutureConverters
 import scala.language.existentials
-
 import play.core.Execution.Implicits.trampoline
 import play.api.mvc._
-import play.mvc.{ Action => JAction, Result => JResult, BodyParser => JBodyParser }
+import play.mvc.{ FileMimeTypes, Action => JAction, BodyParser => JBodyParser, Result => JResult }
+import play.i18n.{ Langs => JLangs, MessagesApi => JMessagesApi }
 import play.mvc.Http.{ Context => JContext }
+
 import scala.concurrent.{ ExecutionContext, Future }
 
 /**
@@ -24,9 +25,7 @@ import scala.concurrent.{ ExecutionContext, Future }
  * @param controller The controller to be evaluated
  * @param method     The method to be evaluated
  */
-class JavaActionAnnotations(val controller: Class[_], val method: java.lang.reflect.Method) {
-  private def config: ActionCompositionConfiguration = HttpConfiguration.current.actionComposition
-
+class JavaActionAnnotations(val controller: Class[_], val method: java.lang.reflect.Method, config: ActionCompositionConfiguration) {
   val parser: Class[_ <: JBodyParser[_]] =
     Seq(method.getAnnotation(classOf[play.mvc.BodyParser.Of]), controller.getAnnotation(classOf[play.mvc.BodyParser.Of]))
       .filterNot(_ == null)
@@ -54,15 +53,18 @@ class JavaActionAnnotations(val controller: Class[_], val method: java.lang.refl
 /*
  * An action that's handling Java requests
  */
-abstract class JavaAction(components: JavaHandlerComponents) extends Action[play.mvc.Http.RequestBody] with JavaHelpers {
-  private def config: ActionCompositionConfiguration = HttpConfiguration.current.actionComposition
+abstract class JavaAction(val handlerComponents: JavaHandlerComponents)
+    extends Action[play.mvc.Http.RequestBody] with JavaHelpers {
+  private def config: ActionCompositionConfiguration = handlerComponents.httpConfiguration.actionComposition
 
   def invocation: CompletionStage[JResult]
   val annotations: JavaActionAnnotations
 
-  def apply(req: Request[play.mvc.Http.RequestBody]): Future[Result] = {
+  val executionContext: ExecutionContext = handlerComponents.executionContext
 
-    val javaContext: JContext = createJavaContext(req)
+  def apply(req: Request[play.mvc.Http.RequestBody]): Future[Result] = {
+    val contextComponents = handlerComponents.contextComponents
+    val javaContext: JContext = createJavaContext(req, contextComponents)
 
     val rootAction = new JAction[Any] {
       def call(ctx: JContext): CompletionStage[JResult] = {
@@ -77,7 +79,7 @@ abstract class JavaAction(components: JavaHandlerComponents) extends Action[play
       }
     }
 
-    val baseAction = components.actionCreator.createAction(javaContext.request, annotations.method)
+    val baseAction = handlerComponents.actionCreator.createAction(javaContext.request, annotations.method)
 
     val endOfChainAction = if (config.executeActionCreatorActionFirst) {
       rootAction
@@ -88,13 +90,13 @@ abstract class JavaAction(components: JavaHandlerComponents) extends Action[play
 
     val finalUserDeclaredAction = annotations.actionMixins.foldLeft[JAction[_ <: Any]](endOfChainAction) {
       case (delegate, (annotation, actionClass)) =>
-        val action = components.getAction(actionClass).asInstanceOf[play.mvc.Action[Object]]
+        val action = handlerComponents.getAction(actionClass).asInstanceOf[play.mvc.Action[Object]]
         action.configuration = annotation
         action.delegate = delegate
         action
     }
 
-    val finalAction = components.actionCreator.wrapAction(if (config.executeActionCreatorActionFirst) {
+    val finalAction = handlerComponents.actionCreator.wrapAction(if (config.executeActionCreatorActionFirst) {
       baseAction.delegate = finalUserDeclaredAction
       baseAction
     } else {
@@ -125,19 +127,45 @@ trait JavaHandler extends Handler {
   /**
    * Return a Handler that has the necessary components supplied to execute it.
    */
-  def withComponents(components: JavaHandlerComponents): Handler
+  def withComponents(handlerComponents: JavaHandlerComponents): Handler
 }
+
+trait JavaContextComponents {
+  def messagesApi: JMessagesApi
+  def langs: JLangs
+  def fileMimeTypes: FileMimeTypes
+  def httpConfiguration: HttpConfiguration
+}
+
+/**
+ * The components necessary to handle a play.mvc.Http.Context object.
+ */
+class DefaultJavaContextComponents @Inject() (
+  val messagesApi: JMessagesApi,
+  val langs: JLangs,
+  val fileMimeTypes: FileMimeTypes,
+  val httpConfiguration: HttpConfiguration
+) extends JavaContextComponents
 
 trait JavaHandlerComponents {
   def getBodyParser[A <: JBodyParser[_]](parserClass: Class[A]): A
   def getAction[A <: JAction[_]](actionClass: Class[A]): A
   def actionCreator: play.http.ActionCreator
+  def httpConfiguration: HttpConfiguration
+  def executionContext: ExecutionContext
+  def contextComponents: JavaContextComponents
 }
 
 /**
  * The components necessary to handle a Java handler.
  */
-class DefaultJavaHandlerComponents @Inject() (injector: Injector, val actionCreator: play.http.ActionCreator) extends JavaHandlerComponents {
+class DefaultJavaHandlerComponents @Inject() (
+    injector: Injector,
+    val actionCreator: play.http.ActionCreator,
+    val httpConfiguration: HttpConfiguration,
+    val executionContext: ExecutionContext,
+    val contextComponents: JavaContextComponents
+) extends JavaHandlerComponents {
   def getBodyParser[A <: JBodyParser[_]](parserClass: Class[A]): A = injector.instanceOf(parserClass)
   def getAction[A <: JAction[_]](actionClass: Class[A]): A = injector.instanceOf(actionClass)
 }

@@ -1,27 +1,29 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.mvc
 
-import akka.stream.Materializer
 import java.util.concurrent.CompletionStage
 import java.util.function.{ Function => JFunction }
+
+import akka.stream.Materializer
 import org.specs2.mutable.Specification
 import play.api.http.{ DefaultHttpErrorHandler, HttpErrorHandler }
 import play.api.libs.streams.Accumulator
 import play.api.libs.ws.WSClient
-import play.api.routing.Router
-import play.api.{ Environment, ApplicationLoader, BuiltInComponentsFromContext }
 import play.api.mvc._
+import play.api.routing.Router
 import play.api.test._
+import play.api.{ ApplicationLoader, BuiltInComponents, BuiltInComponentsFromContext, Environment }
 import play.core.server.Server
 import play.it._
-import scala.concurrent.duration.Duration
-import scala.concurrent._
-import play.api.libs.concurrent.Execution.{ defaultContext => ec }
 
-object NettyDefaultFiltersSpec extends DefaultFiltersSpec with NettyIntegrationSpecification
-object AkkaDefaultHttpFiltersSpec extends DefaultFiltersSpec with AkkaHttpIntegrationSpecification
+import scala.concurrent.ExecutionContext.{ global => ec }
+import scala.concurrent._
+import scala.concurrent.duration.Duration
+
+class NettyDefaultFiltersSpec extends DefaultFiltersSpec with NettyIntegrationSpecification
+class AkkaDefaultHttpFiltersSpec extends DefaultFiltersSpec with AkkaHttpIntegrationSpecification
 
 trait DefaultFiltersSpec extends FiltersSpec {
 
@@ -37,7 +39,7 @@ trait DefaultFiltersSpec extends FiltersSpec {
       environment = Environment.simple(),
       initialSettings = settings
     )) {
-      lazy val router = testRouter
+      lazy val router = testRouter(this)
       override lazy val httpFilters: Seq[EssentialFilter] = makeFilters(materializer)
       override lazy val httpErrorHandler = errorHandler.getOrElse(
         new DefaultHttpErrorHandler(environment, configuration, sourceMapper, Some(router))
@@ -160,7 +162,7 @@ trait FiltersSpec extends Specification with ServerIntegrationSpecification {
       }
     }
 
-    "Filters are not applied when the request is outside the application.context" in withServer(
+    "Filters are not applied when the request is outside play.http.context" in withServer(
       Map("play.http.context" -> "/foo"))(ErrorHandlingFilter, ThrowExceptionFilter) { ws =>
         val response = Await.result(ws.url("/ok").post(expectedOkText), Duration.Inf)
         response.status must_== 200
@@ -192,12 +194,24 @@ trait FiltersSpec extends Specification with ServerIntegrationSpecification {
       response.body must_== ThrowExceptionFilter.expectedText
     }
 
+    object ThreadNameFilter extends EssentialFilter {
+      def apply(next: EssentialAction): EssentialAction = EssentialAction { req =>
+        Accumulator.done(Results.Ok(Thread.currentThread().getName))
+      }
+    }
+
+    "Filters should use the Akka ExecutionContext" in withServer()(ThreadNameFilter) { ws =>
+      val result = Await.result(ws.url("/ok").get(), Duration.Inf)
+      val threadName = result.body
+      threadName must startWith("application-akka.actor.default-dispatcher-")
+    }
+
     val filterAddedHeaderKey = "CUSTOM_HEADER"
     val filterAddedHeaderVal = "custom header val"
 
     object CustomHeaderFilter extends EssentialFilter {
       def apply(next: EssentialAction) = EssentialAction { request =>
-        next(request.copy(headers = addCustomHeader(request.headers)))
+        next(request.withHeaders(addCustomHeader(request.headers)))
       }
       def addCustomHeader(originalHeaders: Headers): Headers = {
         FakeHeaders(originalHeaders.headers :+ (filterAddedHeaderKey -> filterAddedHeaderVal))
@@ -224,7 +238,7 @@ trait FiltersSpec extends Specification with ServerIntegrationSpecification {
         next(request).recover {
           case t: Throwable =>
             Results.InternalServerError(t.getMessage)
-        }(play.api.libs.concurrent.Execution.Implicits.defaultContext)
+        }(ec)
       } catch {
         case t: Throwable => Accumulator.done(Results.InternalServerError(t.getMessage))
       }
@@ -232,8 +246,8 @@ trait FiltersSpec extends Specification with ServerIntegrationSpecification {
   }
 
   object JavaErrorHandlingFilter extends play.mvc.EssentialFilter {
-    import play.mvc._
     import play.libs.streams.Accumulator
+    import play.mvc._
 
     private def getResult(t: Throwable): Result = {
       // Get the cause of the CompletionException
@@ -245,7 +259,7 @@ trait FiltersSpec extends Specification with ServerIntegrationSpecification {
         try {
           next.apply(request).recover(new java.util.function.Function[Throwable, Result]() {
             def apply(t: Throwable) = getResult(t)
-          }, play.core.Execution.internalContext)
+          }, ec)
         } catch {
           case t: Throwable => Accumulator.done(getResult(t))
         }
@@ -270,7 +284,7 @@ trait FiltersSpec extends Specification with ServerIntegrationSpecification {
   }
 
   object ThrowExceptionFilter extends EssentialFilter {
-    val expectedText = "This filter calls next and throws an exception afterwords"
+    val expectedText = "This filter calls next and throws an exception afterwards"
 
     def apply(next: EssentialAction) = EssentialAction { request =>
       next(request).map { _ =>
@@ -283,14 +297,17 @@ trait FiltersSpec extends Specification with ServerIntegrationSpecification {
   val expectedErrorText = "Error"
 
   import play.api.routing.sird._
-  val testRouter = Router.from {
-    case GET(p"/") => Action { request => Results.Ok(expectedOkText) }
-    case GET(p"/ok") => Action { request => Results.Ok(expectedOkText) }
-    case POST(p"/ok") => Action { request => Results.Ok(request.body.asText.getOrElse("")) }
-    case GET(p"/error") => Action { request => throw new RuntimeException(expectedErrorText) }
-    case POST(p"/error") => Action { request => throw new RuntimeException(request.body.asText.getOrElse("")) }
-    case GET(p"/error-async") => Action.async { request => Future { throw new RuntimeException(expectedErrorText) }(ec) }
-    case POST(p"/error-async") => Action.async { request => Future { throw new RuntimeException(request.body.asText.getOrElse("")) }(ec) }
+  def testRouter(components: BuiltInComponents) = {
+    val Action = components.defaultActionBuilder
+    Router.from {
+      case GET(p"/") => Action { request => Results.Ok(expectedOkText) }
+      case GET(p"/ok") => Action { request => Results.Ok(expectedOkText) }
+      case POST(p"/ok") => Action { request => Results.Ok(request.body.asText.getOrElse("")) }
+      case GET(p"/error") => Action { request => throw new RuntimeException(expectedErrorText) }
+      case POST(p"/error") => Action { request => throw new RuntimeException(request.body.asText.getOrElse("")) }
+      case GET(p"/error-async") => Action.async { request => Future { throw new RuntimeException(expectedErrorText) }(ec) }
+      case POST(p"/error-async") => Action.async { request => Future { throw new RuntimeException(request.body.asText.getOrElse("")) }(ec) }
+    }
   }
 
   def withServer[T](settings: Map[String, String] = Map.empty, errorHandler: Option[HttpErrorHandler] = None)(filters: EssentialFilter*)(block: WSClient => T): T

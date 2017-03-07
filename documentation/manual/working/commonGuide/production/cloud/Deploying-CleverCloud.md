@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Deploying to Clever Cloud
 [Clever Cloud](https://www.clever-cloud.com/en/) is a Platform as a Service solution. You can deploy on it Scala, Java, PHP, Python and Node.js applications. Its main particularity is that it supports **automatic vertical and horizontal scaling**.
 
@@ -37,7 +37,7 @@ You can check the deployment of your application by visiting the ***logs*** sect
 
 
 ## [Optional] Configure your application
-You can custom your application with a `clevercloud/play.json` file.
+You can custom your application with a `clevercloud/sbt.json` file.
 
 The file must contain the following fields:
 

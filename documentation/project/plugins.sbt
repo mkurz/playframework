@@ -1,4 +1,4 @@
-// Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+// Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
 
 // Comment to get more information during initialization
 logLevel := Level.Warn
@@ -11,4 +11,4 @@ lazy val playDocsPlugin = ProjectRef(Path.fileProperty("user.dir").getParentFile
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.11.2")
 
 // Required for PlayEnhancer.md
-addSbtPlugin("com.typesafe.sbt" % "sbt-play-enhancer" % "1.1.0-RC2")
+addSbtPlugin("com.typesafe.sbt" % "sbt-play-enhancer" % "1.1.0")

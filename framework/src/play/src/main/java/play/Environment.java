@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play;
 
@@ -147,7 +147,7 @@ public class Environment {
      * The underlying Scala API Environment object that this Environment
      * wraps.
      *
-     * @return the environemnt
+     * @return the environment
      */
     public play.api.Environment underlying() {
         return env;

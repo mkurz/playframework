@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.http.parsing
 
@@ -11,7 +11,7 @@ import play.api.mvc.Results.BadRequest
 import play.api.mvc.{ BodyParser, BodyParsers }
 import play.api.test._
 
-object JsonBodyParserSpec extends PlaySpecification {
+class JsonBodyParserSpec extends PlaySpecification {
 
   private case class Foo(a: Int, b: String)
   private implicit val fooFormat = Json.format[Foo]

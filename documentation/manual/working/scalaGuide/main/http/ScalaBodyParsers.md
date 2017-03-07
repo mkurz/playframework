@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Body parsers
 
 ## What is a body parser?
@@ -27,7 +27,7 @@ Most typical web apps will not need to use custom body parsers, they can simply 
 
 ### The default body parser
 
-The default body parser that's used if you do not explicitly select a body parser will look at the incoming `Content-Type` header, and parses the body accordingly.  So for example, a `Content-Type` of type `application/json` will be parsed as a `JsValue`, while a `Content-Type` of `application/x-form-www-urlencoded` will be parsed as a `Map[String, Seq[String]]`.
+The default body parser that's used if you do not explicitly select a body parser will look at the incoming `Content-Type` header, and parses the body accordingly.  So for example, a `Content-Type` of type `application/json` will be parsed as a `JsValue`, while a `Content-Type` of `application/x-www-form-urlencoded` will be parsed as a `Map[String, Seq[String]]`.
 
 The default body parser produces a body of type [`AnyContent`](api/scala/play/api/mvc/AnyContent.html).  The various types supported by `AnyContent` are accessible via `as` methods, such as `asJson`, which returns an `Option` of the body type:
 
@@ -36,9 +36,9 @@ The default body parser produces a body of type [`AnyContent`](api/scala/play/ap
 The following is a mapping of types supported by the default body parser:
 
 - **text/plain**: `String`, accessible via `asText`.
-- **application/json**: [`JsValue`](api/scala/play/api/libs/json/JsValue.html), accessible via `asJson`.
+- **application/json**: [`JsValue`](https://oss.sonatype.org/service/local/repositories/public/archive/com/typesafe/play/play-json_2.12/2.6.0-M1/play-json_2.12-2.6.0-M1-javadoc.jar/!/play/api/libs/json/JsValue.html), accessible via `asJson`.
 - **application/xml**, **text/xml** or **application/XXX+xml**: `scala.xml.NodeSeq`, accessible via `asXml`.
-- **application/form-url-encoded**: `Map[String, Seq[String]]`, accessible via `asFormUrlEncoded`.
+- **application/x-www-form-urlencoded**: `Map[String, Seq[String]]`, accessible via `asFormUrlEncoded`.
 - **multipart/form-data**: [`MultipartFormData`](api/scala/play/api/mvc/MultipartFormData.html), accessible via `asMultipartFormData`.
 - Any other content type: [`RawBuffer`](api/scala/play/api/mvc/RawBuffer.html), accessible via `asRaw`.
 
@@ -50,7 +50,7 @@ If you would like to try to parse a body in all cases, you can use the `anyConte
 
 If you want to explicitly select a body parser, this can be done by passing a body parser to the `Action` [`apply`](api/scala/play/api/mvc/ActionBuilder.html#apply[A]\(bodyParser:play.api.mvc.BodyParser[A]\)\(block:R[A]=%3Eplay.api.mvc.Result\):play.api.mvc.Action[A]) or [`async`](api/scala/play/api/mvc/ActionBuilder.html#async[A]\(bodyParser:play.api.mvc.BodyParser[A]\)\(block:R[A]=%3Escala.concurrent.Future[play.api.mvc.Result]\):play.api.mvc.Action[A]) method.
 
-Play provides a number of body parsers out of the box, this is made available through the [`BodyParsers.parse`](api/scala/play/api/mvc/BodyParsers$parse$.html) object, which is conveniently pulled in by the [`Controller`](api/scala/play/api/mvc/Controller.html) trait.
+Play provides a number of body parsers out of the box, this is made available through the [`PlayBodyParsers`](api/scala/play/api/mvc/PlayBodyParsers.html) trait, which can be injected into your controller.
 
 So for example, to define an action expecting a json body (as in the previous example):
 

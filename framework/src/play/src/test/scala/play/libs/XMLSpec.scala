@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.libs
 
@@ -8,7 +8,7 @@ import java.io.{ FileOutputStream, File }
 import org.specs2.mutable.Specification
 import org.xml.sax.SAXException
 
-object XMLSpec extends Specification {
+class XMLSpec extends Specification {
 
   "The Java XML support" should {
 
@@ -46,7 +46,8 @@ object XMLSpec extends Specification {
     "parse XML bodies without loading in a related schema from a parameter" in {
       val externalParameterEntity = File.createTempFile("xep", ".dtd")
       val externalGeneralEntity = File.createTempFile("xxe", ".txt")
-      writeStringToFile(externalParameterEntity,
+      writeStringToFile(
+        externalParameterEntity,
         s"""
           |<!ENTITY % xge SYSTEM "${externalGeneralEntity.toURI}">
           |<!ENTITY % pe "<!ENTITY xxe '%xge;'>">

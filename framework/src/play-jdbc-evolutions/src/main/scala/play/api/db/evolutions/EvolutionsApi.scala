@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db.evolutions
 
 import java.io.{ FileInputStream, InputStream }
-import java.sql.{ Connection, Date, PreparedStatement, ResultSet, SQLException }
+import java.sql._
 import javax.inject.{ Inject, Singleton }
 
 import play.api.db.{ DBApi, Database }
@@ -67,6 +67,14 @@ trait EvolutionsApi {
    * @param schema The schema where all the play evolution tables are saved in
    */
   def resolve(db: String, revision: Int, schema: String): Unit
+
+  /**
+   * Apply pending evolutions for the given database.
+   */
+  def applyFor(dbName: String, path: java.io.File = new java.io.File("."), autocommit: Boolean = true, schema: String = ""): Unit = {
+    val scripts = this.scripts(dbName, new EnvironmentEvolutionsReader(Environment.simple(path = path)), schema)
+    this.evolve(dbName, scripts, autocommit, schema)
+  }
 }
 
 /**
@@ -123,10 +131,8 @@ class DatabaseEvolutions(database: Database, schema: String = "") {
   private def databaseEvolutions(): Seq[Evolution] = {
     implicit val connection = database.getConnection(autocommit = true)
 
-    checkEvolutionsState()
-
     try {
-
+      checkEvolutionsState()
       Collections.unfoldLeft(executeQuery(
         """
             select id, hash, apply_script, revert_script from ${schema}play_evolutions order by id
@@ -158,7 +164,7 @@ class DatabaseEvolutions(database: Database, schema: String = "") {
           ) { ps =>
               ps.setInt(1, e.revision)
               ps.setString(2, e.hash)
-              ps.setDate(3, new Date(System.currentTimeMillis()))
+              ps.setTimestamp(3, new Timestamp(System.currentTimeMillis()))
               ps.setString(4, e.sql_up)
               ps.setString(5, e.sql_down)
               ps.setString(6, "applying_up")
@@ -487,7 +493,8 @@ class EnvironmentEvolutionsReader @Inject() (environment: Environment) extends R
  * @param prefix A prefix that gets added to the resource file names, for example, this could be used to namespace
  *               evolutions in different environments to work with different databases.
  */
-class ClassLoaderEvolutionsReader(classLoader: ClassLoader = classOf[ClassLoaderEvolutionsReader].getClassLoader,
+class ClassLoaderEvolutionsReader(
+    classLoader: ClassLoader = classOf[ClassLoaderEvolutionsReader].getClassLoader,
     prefix: String = "") extends ResourceEvolutionsReader {
   def loadResource(db: String, revision: Int) = {
     Option(classLoader.getResourceAsStream(prefix + Evolutions.resourceName(db, revision)))
@@ -554,7 +561,7 @@ case class InconsistentDatabase(db: String, script: String, error: String, rev: 
   private val resolvePathJavascript =
     if (autocommit) s"'/@evolutions/resolve/$db/$rev?redirect=' + encodeURIComponent(window.location)"
     else "'/@evolutions'"
-  private val redirectJavascript = s"""window.location = window.location.href.replace(/\\/@evolutions.*$$|\\/$$/, '') + $resolvePathJavascript"""
+  private val redirectJavascript = s"""window.location = window.location.href.split(/[?#]/)[0].replace(/\\/@evolutions.*$$|\\/$$/, '') + $resolvePathJavascript"""
 
   private val sentenceEnd = if (autocommit) " before marking it as resolved." else "."
 

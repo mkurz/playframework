@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package javaguide.akka.ask;
 
@@ -21,7 +21,7 @@ public class Application extends Controller {
     final ActorRef helloActor;
 
     @Inject public Application(ActorSystem system) {
-        helloActor = system.actorOf(HelloActor.props);
+        helloActor = system.actorOf(HelloActor.getProps());
     }
 
     public CompletionStage<Result> sayHello(String name) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api
 
@@ -11,7 +11,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 import javax.xml.parsers.SAXParserFactory
-import org.apache.xerces.impl.Constants
+import play.libs.XML.Constants
 import javax.xml.XMLConstants
 
 /** Application mode, either `DEV`, `TEST`, or `PROD`. */
@@ -22,16 +22,12 @@ object Mode extends Enumeration {
 
 /**
  * High-level API to access Play global features.
- *
- * Note that this API depends on a running application.
- * You can import the currently running application in a scope using:
- * {{{
- * import play.api.Play.current
- * }}}
  */
 object Play {
 
   private val logger = Logger(Play.getClass)
+
+  private[play] val GlobalAppConfigKey = "play.allowGlobalApplication"
 
   /*
    * We want control over the sax parser used so we specify the factory required explicitly. We know that
@@ -39,8 +35,7 @@ object Play {
    * no explicit doco stating this is the case. That said, there does not appear to be any other way than
    * declaring a factory in order to yield a parser of a specific type.
    */
-  private[play] val xercesSaxParserFactory =
-    SAXParserFactory.newInstance("org.apache.xerces.jaxp.SAXParserFactoryImpl", Play.getClass.getClassLoader)
+  private[play] val xercesSaxParserFactory = SAXParserFactory.newInstance()
   xercesSaxParserFactory.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_GENERAL_ENTITIES_FEATURE, false)
   xercesSaxParserFactory.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_PARAMETER_ENTITIES_FEATURE, false)
   xercesSaxParserFactory.setFeature(Constants.XERCES_FEATURE_PREFIX + Constants.DISALLOW_DOCTYPE_DECL_FEATURE, true)
@@ -69,8 +64,9 @@ object Play {
 
   private[play] def privateMaybeApplication: Option[Application] = {
     Option(_currentApp) match {
-      case Some(app) if !app.configuration.getBoolean("play.globalApplication").getOrElse(true) =>
-        sys.error("The global application is disabled. Set play.globalApplication to allow global state here")
+      case Some(app) if !app.globalApplicationEnabled =>
+        (new RuntimeException).printStackTrace()
+        sys.error(s"The global application is disabled. Set $GlobalAppConfigKey to allow global state here.")
       case opt => opt
     }
   }
@@ -92,20 +88,33 @@ object Play {
   @volatile private var _currentApp: Application = _
 
   /**
-   * Starts this application.
+   * Sets the global application instance.
+   *
+   * If another app was previously started using this API and the global application is enabled, Play.stop will be
+   * called on the existing application.
    *
    * @param app the application to start
    */
-  def start(app: Application) {
+  def start(app: Application): Unit = synchronized {
 
-    // First stop previous app if exists
-    stop(_currentApp)
+    val globalApp = app.globalApplicationEnabled
 
-    _currentApp = app
+    // Stop the current app if the new app needs to replace the current app instance
+    if (globalApp && _currentApp != null && _currentApp.globalApplicationEnabled) {
+      logger.info("Stopping current application")
+      stop(_currentApp)
+    }
 
     app.mode match {
       case Mode.Test =>
-      case mode => logger.info("Application started (" + mode + ")")
+      case mode =>
+        logger.info(s"Application started ($mode)${if (!globalApp) " (no global state)" else ""}")
+    }
+
+    // Set the current app if the global application is enabled
+    // Also set it if the current app is null, in order to display more useful errors if we try to use the app
+    if (globalApp || _currentApp == null) {
+      _currentApp = app
     }
 
   }
@@ -113,13 +122,17 @@ object Play {
   /**
    * Stops the given application.
    */
-  def stop(app: Application) {
+  def stop(app: Application): Unit = {
     if (app != null) {
       Threads.withContextClassLoader(app.classloader) {
         try { Await.ready(app.stop(), Duration.Inf) } catch { case NonFatal(e) => logger.warn("Error stopping application", e) }
       }
     }
-    _currentApp = null
+    synchronized {
+      if (app == _currentApp) { // Don't bother un-setting the current app unless it's our app
+        _currentApp = null
+      }
+    }
   }
 
   /**

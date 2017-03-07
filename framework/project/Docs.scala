@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 import sbt._
 import sbt.Keys._
@@ -26,17 +26,19 @@ object Docs {
   lazy val settings = Seq(
     apiDocsInclude := false,
     apiDocsIncludeManaged := false,
-    apiDocsScalaSources <<= (thisProjectRef, buildStructure) flatMap allSources(Compile, ".scala"),
-    apiDocsClasspath <<= (thisProjectRef, buildStructure) flatMap allClasspaths,
-    apiDocsJavaSources <<= (thisProjectRef, buildStructure) flatMap allSources(Compile, ".java"),
+    apiDocsScalaSources := ((thisProjectRef, buildStructure) flatMap allSources(Compile, ".scala")).value,
+    apiDocsClasspath := ((thisProjectRef, buildStructure) flatMap allClasspaths).value,
+    apiDocsJavaSources := ((thisProjectRef, buildStructure) flatMap allSources(Compile, ".java")).value,
     apiDocsUseCache := true,
-    apiDocs <<= apiDocsTask,
+    apiDocs := apiDocsTask.value,
     ivyConfigurations += Webjars,
-    extractWebjars <<= extractWebjarContents,
-    allConfs in Global <<= (thisProjectRef, buildStructure) flatMap allConfsTask,
-    mappings in (Compile, packageBin) <++= (baseDirectory, apiDocs, extractWebjars, version, allConfs) map { (base, apiBase, webjars, playVersion, confs) =>
+    extractWebjars := extractWebjarContents.value,
+    allConfs in Global := ((thisProjectRef, buildStructure) flatMap allConfsTask).value,
+    mappings in (Compile, packageBin) ++= {
+      val apiBase = apiDocs.value
+      val webjars = extractWebjars.value
       // Include documentation and API docs in main binary JAR
-      val docBase = base / "../../../documentation"
+      val docBase = baseDirectory.value / "../../../documentation"
       val raw = (docBase \ "manual" ** "*") +++ (docBase \ "style" ** "*")
       val filtered = raw.filter(_.getName != ".DS_Store")
       val docMappings = filtered.get pair rebase(docBase, "play/docs/content/")
@@ -44,10 +46,10 @@ object Docs {
       val apiDocMappings = (apiBase ** "*").get pair rebase(apiBase, "play/docs/content/api")
 
       // The play version is added so that resource paths are versioned
-      val webjarMappings = webjars.*** pair rebase(webjars, "play/docs/content/webjars/" + playVersion)
+      val webjarMappings = webjars.*** pair rebase(webjars, "play/docs/content/webjars/" + version.value)
 
       // Gather all the conf files into the project
-      val referenceConfMappings = confs.map {
+      val referenceConfMappings = allConfs.value.map {
         case (projectName, conf) => conf -> s"play/docs/content/confs/$projectName/${conf.getName}"
       }
 
@@ -58,7 +60,7 @@ object Docs {
   def playdocSettings: Seq[Setting[_]] = Playdoc.projectSettings ++
     Seq(
       ivyConfigurations += Webjars,
-      extractWebjars <<= extractWebjarContents,
+      extractWebjars := extractWebjarContents.value,
       libraryDependencies ++= Dependencies.playdocWebjarDependencies,
       mappings in playdocPackage := {
         val base = (baseDirectory in ThisBuild).value
@@ -81,6 +83,7 @@ object Docs {
       }
     )
 
+  // This is a specialized task that does not replace "sbt doc" but packages all the doc at once.
   def apiDocsTask = Def.task {
 
     val targetDir = new File(target.value, "scala-" + CrossVersion.binaryScalaVersion(scalaVersion.value))
@@ -99,6 +102,7 @@ object Docs {
       val javaCache = new File(targetDir, "javaapidocs.cache")
 
       val label = "Play " + version
+      // Use the apiMappings value from the "doc" command
       val apiMappings = Keys.apiMappings.value
       val externalDocsScalacOption = Opts.doc.externalAPI(apiMappings).head.replace("-doc-external-doc:", "")
 
@@ -109,8 +113,7 @@ object Docs {
         // Hence it needs to be the base directory for the build, not the base directory for the play-docs project.
         "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath,
         "-doc-source-url", "https://github.com/playframework/playframework/tree/" + sourceTree + "/framework€{FILE_PATH}.scala",
-        "-doc-external-doc", externalDocsScalacOption)
-
+        s"-doc-external-doc:${externalDocsScalacOption}")
 
       val compilers = Keys.compilers.value
       val useCache = apiDocsUseCache.value
@@ -130,7 +133,6 @@ object Docs {
         "-notimestamp",
         "-subpackages", "play",
         "-Xmaxwarns", "1000",
-        "-Xdoclint:none", // We would like to relax this, but for now too much stuff breaks.
         "-exclude", "play.api:play.core"
       )
 
@@ -141,8 +143,64 @@ object Docs {
       javadoc(apiDocsJavaSources.value, classpath, apiTarget / "java", javadocOptions, 10, streams.value.log)
     }
 
+    val externalJavadocLinks = {
+      // Known Java libraries in non-standard locations...
+      // All the external Javadoc URLs that must be fixed.
+      val nonStandardJavadocLinks = Set(
+        javaApiUrl,
+        javaxInjectUrl,
+        ehCacheUrl,
+        guiceUrl
+      )
+
+      import Dependencies._
+      val standardJavadocModuleIDs = Set(playJson) ++ slf4j
+
+      nonStandardJavadocLinks ++ standardJavadocModuleIDs.map(moduleIDToJavadoc)
+    }
+
+    import scala.util.matching.Regex
+    import scala.util.matching.Regex.Match
+
+    def javadocLinkRegex(javadocURL: String): Regex = ("""\"(\Q""" + javadocURL + """\E)#([^"]*)\"""").r
+
+    def hasJavadocLink(f: File): Boolean = externalJavadocLinks exists { javadocURL: String =>
+      (javadocLinkRegex(javadocURL) findFirstIn IO.read(f)).nonEmpty
+    }
+
+    val fixJavaLinks: Match => String = m =>
+      m.group(1) + "?" + m.group(2).replace(".", "/") + ".html"
+
+    // Maps to Javadoc references in Scaladoc, and fixes the link so that it uses query parameters in
+    // Javadoc style to link directly to the referenced class.
+    // http://stackoverflow.com/questions/16934488/how-to-link-classes-from-jdk-into-scaladoc-generated-doc/
+    (apiTarget ** "*.html").get.filter(hasJavadocLink).foreach { f =>
+      val newContent: String = externalJavadocLinks.foldLeft(IO.read(f)) {
+        case (oldContent: String, javadocURL: String) =>
+          javadocLinkRegex(javadocURL).replaceAllIn(oldContent, fixJavaLinks)
+      }
+      IO.write(f, newContent)
+    }
     apiTarget
   }
+
+  // Converts an artifact into a Javadoc URL.
+  def artifactToJavadoc(organization: String, name: String, apiVersion:String, jarBaseFile: String) = {
+    val slashedOrg = organization.replace('.', '/')
+    raw"""https://oss.sonatype.org/service/local/repositories/public/archive/$slashedOrg/$name/$apiVersion/$jarBaseFile-javadoc.jar/!/index.html"""
+  }
+
+  // Converts an SBT module into a Javadoc URL.
+  def moduleIDToJavadoc(id: ModuleID): String = {
+    artifactToJavadoc(id.organization, id.name, id.revision, s"${id.name}-${id.revision}")
+  }
+
+  val javaApiUrl = "http://docs.oracle.com/javase/8/docs/api/index.html"
+  val javaxInjectUrl = "https://javax-inject.github.io/javax-inject/api/index.html"
+  // ehcache has 2.6.11 as version, but latest is only 2.6.9 on the site!
+  val ehCacheUrl = raw"http://www.ehcache.org/apidocs/2.6.9/index.html"
+  // nonstandard guice location
+  val guiceUrl = raw"http://google.github.io/guice/api-docs/${Dependencies.guiceVersion}/javadoc/index.html"
 
   def allConfsTask(projectRef: ProjectRef, structure: BuildStructure): Task[Seq[(String, File)]] = {
     val projects = allApiProjects(projectRef.build, structure)

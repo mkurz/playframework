@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.http.parsing
 
@@ -9,7 +9,7 @@ import akka.util.ByteString
 import play.api.mvc._
 import play.api.test._
 
-object DefaultBodyParserSpec extends PlaySpecification {
+class DefaultBodyParserSpec extends PlaySpecification {
 
   "The default body parser" should {
 

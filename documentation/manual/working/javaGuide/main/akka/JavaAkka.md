@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Integrating with Akka
 
 [Akka](http://akka.io/) uses the Actor Model to raise the abstraction level and provide a better platform to build correct concurrent and scalable applications. For fault-tolerance it adopts the ‘Let it crash’ model, which has been used with great success in the telecoms industry to build applications that self-heal - systems that never stop. Actors also provide the abstraction for transparent distribution and the basis for truly scalable and fault-tolerant applications.
@@ -15,7 +15,7 @@ To start using Akka, you need to write an actor.  Below is a simple actor that s
 
 @[actor](code/javaguide/akka/HelloActor.java)
 
-Notice here that the `HelloActor` defines a static method called `props`, this returns a `Props` object that describes how to create the actor.  This is a good Akka convention, to separate the instantiation logic from the code that creates the actor.
+Notice here that the `HelloActor` defines a static method called `getProps`, this method returns a `Props` object that describes how to create the actor.  This is a good Akka convention, to separate the instantiation logic from the code that creates the actor.
 
 Another best practice shown here is that the messages that `HelloActor` sends and receives are defined as static inner classes of another class called `HelloActorProtocol`:
 
@@ -78,7 +78,7 @@ Now, the actor that depends on this can extend [`InjectedActorSupport`](api/java
 
 @[injectedparent](code/javaguide/akka/ParentActor.java)
 
-It uses the `injectedChild` to create and get a reference to the child actor, passing in the key.
+It uses the `injectedChild` to create and get a reference to the child actor, passing in the key. The second parameter (`key` in this example) will be used as the child actor's name.
 
 Finally, we need to bind our actors.  In our module, we use the `bindActorFactory` method to bind the parent actor, and also bind the child factory to the child implementation:
 

@@ -1,14 +1,16 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package controllers
 
+import java.io._
 import javax.inject.Inject
 
 import play.api._
+import play.api.http.FileMimeTypes
 import play.api.mvc._
 
-import java.io._
+import scala.concurrent.{ ExecutionContext, Future }
 
 /**
  * Controller that serves static resources from an external folder.
@@ -27,9 +29,11 @@ import java.io._
  * }}}
  *
  */
-class ExternalAssets @Inject() (environment: Environment) extends Controller {
+class ExternalAssets @Inject() (environment: Environment)(implicit ec: ExecutionContext, fileMimeTypes: FileMimeTypes) extends Controller {
 
   val AbsolutePath = """^(/|[a-zA-Z]:\\).*""".r
+
+  private val Action = new ActionBuilder.IgnoringBody()(_root_.controllers.Execution.trampoline)
 
   /**
    * Generates an `Action` that serves a static resource from an external folder
@@ -37,10 +41,10 @@ class ExternalAssets @Inject() (environment: Environment) extends Controller {
    * @param rootPath the root folder for searching the static resource files such as `"/home/peter/public"`, `C:\external` or `relativeToYourApp`
    * @param file the file part extracted from the URL
    */
-  def at(rootPath: String, file: String): Action[AnyContent] = Action { request =>
+  def at(rootPath: String, file: String): Action[AnyContent] = Action.async { request =>
     environment.mode match {
-      case Mode.Prod => NotFound
-      case _ => {
+      case Mode.Prod => Future.successful(NotFound)
+      case _ => Future {
 
         val fileToServe = rootPath match {
           case AbsolutePath(_) => new File(rootPath, file)

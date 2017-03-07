@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.http.parsing
 
@@ -9,13 +9,13 @@ import akka.util.ByteString
 import play.api.test._
 import play.api.mvc.BodyParsers
 
-object IgnoreBodyParserSpec extends PlaySpecification {
+class IgnoreBodyParserSpec extends PlaySpecification {
 
   "The ignore body parser" should {
 
     def parse[A](value: A, bytes: ByteString, contentType: Option[String], encoding: String)(implicit mat: Materializer) = {
       await(
-        BodyParsers.parse.ignore(value)(FakeRequest().withHeaders(contentType.map(CONTENT_TYPE -> _).toSeq: _*))
+        BodyParsers.utils.ignore(value)(FakeRequest().withHeaders(contentType.map(CONTENT_TYPE -> _).toSeq: _*))
           .run(Source.single(bytes))
       )
     }

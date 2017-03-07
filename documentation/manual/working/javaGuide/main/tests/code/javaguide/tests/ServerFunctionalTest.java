@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package javaguide.tests;
 
@@ -28,7 +28,7 @@ public class ServerFunctionalTest extends WithServer {
     public void testInServer() throws Exception {
         int timeout = 5000;
         String url = "http://localhost:" + this.testServer.port() + "/";
-        try (WSClient ws = WS.newClient(this.testServer.port())) {
+        try (WSClient ws = play.test.WSTestClient.newClient(this.testServer.port())) {
             CompletionStage<WSResponse> stage = ws.url(url).get();
             WSResponse response = stage.toCompletableFuture().get();
             assertEquals(NOT_FOUND, response.getStatus());

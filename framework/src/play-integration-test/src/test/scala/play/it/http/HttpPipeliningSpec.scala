@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.http
 
@@ -15,8 +15,8 @@ import akka.pattern.after
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-object NettyHttpPipeliningSpec extends HttpPipeliningSpec with NettyIntegrationSpecification
-object AkkaHttpHttpPipeliningSpec extends HttpPipeliningSpec with AkkaHttpIntegrationSpecification
+class NettyHttpPipeliningSpec extends HttpPipeliningSpec with NettyIntegrationSpecification
+class AkkaHttpHttpPipeliningSpec extends HttpPipeliningSpec with AkkaHttpIntegrationSpecification
 
 trait HttpPipeliningSpec extends PlaySpecification with ServerIntegrationSpecification {
 
@@ -38,7 +38,8 @@ trait HttpPipeliningSpec extends PlaySpecification with ServerIntegrationSpecifi
         case _ => Accumulator.done(Results.NotFound)
       }
     }) { port =>
-      val responses = BasicHttpClient.pipelineRequests(port,
+      val responses = BasicHttpClient.pipelineRequests(
+        port,
         BasicRequest("GET", "/long", "HTTP/1.1", Map(), ""),
         BasicRequest("GET", "/short", "HTTP/1.1", Map(), "")
       )
@@ -46,7 +47,7 @@ trait HttpPipeliningSpec extends PlaySpecification with ServerIntegrationSpecifi
       responses(0).body must beLeft("long")
       responses(1).status must_== 200
       responses(1).body must beLeft("short")
-    }
+    }.skipOnSlowCIServer
 
     "wait for the first response body to return before returning the second" in withServer(EssentialAction { req =>
       req.path match {
@@ -57,7 +58,8 @@ trait HttpPipeliningSpec extends PlaySpecification with ServerIntegrationSpecifi
         case _ => Accumulator.done(Results.NotFound)
       }
     }) { port =>
-      val responses = BasicHttpClient.pipelineRequests(port,
+      val responses = BasicHttpClient.pipelineRequests(
+        port,
         BasicRequest("GET", "/long", "HTTP/1.1", Map(), ""),
         BasicRequest("GET", "/short", "HTTP/1.1", Map(), "")
       )
@@ -66,7 +68,7 @@ trait HttpPipeliningSpec extends PlaySpecification with ServerIntegrationSpecifi
       responses(0).body.right.get._1 must containAllOf(Seq("chunk", "chunk", "chunk")).inOrder
       responses(1).status must_== 200
       responses(1).body must beLeft("short")
-    }
+    }.skipOnSlowCIServer
 
   }
 }

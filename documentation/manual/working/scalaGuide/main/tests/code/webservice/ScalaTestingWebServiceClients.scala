@@ -1,17 +1,18 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package scalaguide.tests.webservice
 
 package client {
 //#client
 import javax.inject.Inject
-import play.api.libs.ws.WSClient
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
-import scala.concurrent.Future
 
-class GitHubClient(ws: WSClient, baseUrl: String) {
-  @Inject def this(ws: WSClient) = this(ws, "https://api.github.com")
+import play.api.libs.ws.WSClient
+
+import scala.concurrent.{ExecutionContext, Future}
+
+class GitHubClient(ws: WSClient, baseUrl: String)(implicit ec: ExecutionContext) {
+  @Inject def this(ws: WSClient, ec: ExecutionContext) = this(ws, "https://api.github.com")(ec)
 
   def repositories(): Future[Seq[String]] = {
     ws.url(baseUrl + "/repositories").get().map { response =>
@@ -40,7 +41,8 @@ import scala.concurrent.duration._
 import org.specs2.mutable.Specification
 import org.specs2.time.NoTimeConversions
 
-object GitHubClientSpec extends Specification with NoTimeConversions {
+class GitHubClientSpec extends Specification with NoTimeConversions {
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   "GitHubClient" should {
     "get all repositories" in {
@@ -68,8 +70,12 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import org.specs2.mutable.Specification
 import org.specs2.time.NoTimeConversions
+import play.api.routing.Router
+import play.api.{BuiltInComponents, BuiltInComponentsFromContext}
+import play.api.routing.sird._
 
-object ScalaTestingWebServiceClients extends Specification with NoTimeConversions {
+class ScalaTestingWebServiceClients extends Specification with NoTimeConversions {
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   "webservice testing" should {
     "allow mocking a service" in {
@@ -92,16 +98,20 @@ object ScalaTestingWebServiceClients extends Specification with NoTimeConversion
 
     "allow sending a resource" in {
       //#send-resource
-      import play.api.Play
       import play.api.mvc._
       import play.api.routing.sird._
       import play.api.test._
       import play.core.server.Server
 
-      Server.withRouter() {
-        case GET(p"/repositories") => Action {
-          Results.Ok.sendResource("github/repositories.json")
-        }
+      Server.withApplicationFromContext() { context =>
+        new BuiltInComponentsFromContext(context) {
+          override def router: Router = Router.from {
+            case GET(p"/repositories") =>
+              this.defaultActionBuilder { req =>
+                Results.Ok.sendResource("github/repositories.json")(fileMimeTypes)
+              }
+          }
+        }.application
       } { implicit port =>
         //#send-resource
         WsTestClient.withClient { client =>
@@ -112,17 +122,21 @@ object ScalaTestingWebServiceClients extends Specification with NoTimeConversion
 
     "allow being dry" in {
       //#with-github-client
-      import play.api.Play
       import play.api.mvc._
       import play.api.routing.sird._
       import play.core.server.Server
       import play.api.test._
 
       def withGitHubClient[T](block: GitHubClient => T): T = {
-        Server.withRouter() {
-          case GET(p"/repositories") => Action {
-            Results.Ok.sendResource("github/repositories.json")
-          }
+        Server.withApplicationFromContext() { context =>
+          new BuiltInComponentsFromContext(context) {
+            override def router: Router = Router.from {
+              case GET(p"/repositories") =>
+                this.defaultActionBuilder { req =>
+                  Results.Ok.sendResource("github/repositories.json")(fileMimeTypes)
+                }
+            }
+          }.application
         } { implicit port =>
           WsTestClient.withClient { client =>
             block(new GitHubClient(client, ""))

@@ -1,9 +1,15 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
-import play.api.http.{ HttpConfiguration, SessionConfiguration }
+import javax.inject.Inject
+
+import play.api.http.{ HttpConfiguration, SecretConfiguration, SessionConfiguration }
+import play.api.libs.crypto.{ CookieSigner, CookieSignerProvider }
+import play.mvc.Http
+
+import scala.collection.JavaConverters._
 
 /**
  * HTTP Session.
@@ -56,26 +62,40 @@ case class Session(data: Map[String, String] = Map.empty[String, String]) {
    */
   def apply(key: String) = data(key)
 
+  lazy val asJava: Http.Session = new Http.Session(data.asJava)
 }
 
 /**
  * Helper utilities to manage the Session cookie.
  */
-object Session extends CookieBaker[Session] {
-  private def config: SessionConfiguration = HttpConfiguration.current.session
+trait SessionCookieBaker extends CookieBaker[Session] {
+
+  def config: SessionConfiguration
 
   def COOKIE_NAME = config.cookieName
 
-  val emptyCookie = new Session
+  lazy val emptyCookie = new Session
+
   override val isSigned = true
   override def secure = config.secure
   override def maxAge = config.maxAge.map(_.toSeconds.toInt)
   override def httpOnly = config.httpOnly
-  override def path = HttpConfiguration.current.context
+  override def path = config.path
   override def domain = config.domain
-  override def cookieSigner = play.api.libs.Crypto.crypto
 
   def deserialize(data: Map[String, String]) = new Session(data)
 
   def serialize(session: Session) = session.data
+}
+
+class DefaultSessionCookieBaker @Inject() (val config: SessionConfiguration, val cookieSigner: CookieSigner) extends SessionCookieBaker {
+  def this() = this(SessionConfiguration(), new CookieSignerProvider(SecretConfiguration()).get)
+}
+
+@deprecated("Inject [[play.api.mvc.SessionCookieBaker]] instead", "2.6.0")
+object Session extends SessionCookieBaker {
+  def config = HttpConfiguration.current.session
+  def fromJavaSession(javaSession: play.mvc.Http.Session): Session = new Session(javaSession.asScala.toMap)
+  override def path = HttpConfiguration.current.context
+  override def cookieSigner = play.api.libs.Crypto.cookieSigner
 }

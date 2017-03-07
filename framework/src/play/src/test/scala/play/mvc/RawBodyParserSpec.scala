@@ -1,33 +1,31 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.mvc
 
-import akka.util.ByteString
-import akka.stream.javadsl.Source
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
-
 import java.io.IOException
 
+import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
+import akka.stream.javadsl.Source
+import akka.util.ByteString
 import org.specs2.mutable.Specification
 import org.specs2.specification.AfterAll
-
-import play.api.http.ParserConfiguration
-import play.core.test.FakeRequest
-import play.api.mvc.RawBuffer
+import play.api.http.{ DefaultHttpErrorHandler, ParserConfiguration }
+import play.api.libs.Files.SingletonTemporaryFileCreator
+import play.api.mvc.{ PlayBodyParsers, RawBuffer }
 import play.core.j.JavaParsers
-import play.libs.F
+import play.core.test.FakeRequest
 
 import scala.concurrent.Future
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
 
-object RawBodyParserSpec extends Specification with AfterAll {
+class RawBodyParserSpec extends Specification with AfterAll {
   "Java RawBodyParserSpec" title
 
   implicit val system = ActorSystem("content-types-spec")
   implicit val materializer = ActorMaterializer()(system)
+  val tempFileCreator = SingletonTemporaryFileCreator
+  val parsers = PlayBodyParsers(ParserConfiguration(), DefaultHttpErrorHandler, materializer, tempFileCreator)
 
   def afterAll(): Unit = {
     materializer.shutdown()
@@ -39,7 +37,7 @@ object RawBodyParserSpec extends Specification with AfterAll {
 
   def javaParser(p: play.api.mvc.BodyParser[RawBuffer]): BodyParser[RawBuffer] = new BodyParser.DelegatingBodyParser[RawBuffer, RawBuffer](p, java.util.function.Function.identity[RawBuffer]) {}
 
-  def parse[B](body: ByteString, memoryThreshold: Int = config.maxMemoryBuffer, maxLength: Long = config.maxDiskBuffer)(javaParser: B => BodyParser[RawBuffer], parserInit: B = JavaParsers.parse.raw(memoryThreshold, maxLength)): Either[Result, RawBuffer] = {
+  def parse[B](body: ByteString, memoryThreshold: Int = config.maxMemoryBuffer, maxLength: Long = config.maxDiskBuffer)(javaParser: B => BodyParser[RawBuffer], parserInit: B = parsers.raw(memoryThreshold, maxLength)): Either[Result, RawBuffer] = {
     val request = req(FakeRequest(method = "GET", "/x"))
     val parser = javaParser(parserInit)
 
@@ -66,9 +64,18 @@ object RawBodyParserSpec extends Specification with AfterAll {
       "using a future" in {
         import scala.concurrent.ExecutionContext.Implicits.global
         val stage = new java.util.concurrent.CompletableFuture[play.mvc.BodyParser[RawBuffer]]()
+        implicit val system = ActorSystem()
 
         Future {
-          val javaParser = new BodyParser.DelegatingBodyParser[RawBuffer, RawBuffer](JavaParsers.parse.raw(), java.util.function.Function.identity[RawBuffer]) {}
+          val scalaParser = PlayBodyParsers(
+            ParserConfiguration(),
+            new DefaultHttpErrorHandler(play.api.Environment.simple(), play.api.Configuration.empty),
+            ActorMaterializer(),
+            tempFileCreator
+          ).raw
+          val javaParser = new BodyParser.DelegatingBodyParser[RawBuffer, RawBuffer](
+            scalaParser,
+            java.util.function.Function.identity[RawBuffer]) {}
 
           stage.complete(javaParser)
         }

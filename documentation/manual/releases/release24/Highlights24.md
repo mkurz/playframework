@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # What's new in Play 2.4
 
 This page highlights the new features of Play 2.4. If you want learn about the changes you need to make to migrate to Play 2.4, check out the [[Play 2.4 Migration Guide|Migration24]].
@@ -15,7 +15,7 @@ A long term strategy for Play is to remove Play's dependence on global state.  P
 * More interesting deployment scenarios are possible, such as multiple Play instances in a single JVM, or embedding a lightweight Play application.
 * The application lifecycle becomes easier to follow and reason about.
 
-Removing Play's global state is however a big task that will require some disruptive changes to the way Play applications are written.  The approach we are taking to do this is to do as much as possible in Play 2.4 while maintaining backwards compatibility.  For a time, many of Play's APIs will support both methods that rely on require global state and methods that don't rely on global state, allowing you to migrate your application to not depend on global state incrementally, rather than all at once when you uprgade to Play 2.4.
+Removing Play's global state is however a big task that will require some disruptive changes to the way Play applications are written.  The approach we are taking to do this is to do as much as possible in Play 2.4 while maintaining backwards compatibility.  For a time, many of Play's APIs will support both methods that rely on require global state and methods that don't rely on global state, allowing you to migrate your application to not depend on global state incrementally, rather than all at once when you upgrade to Play 2.4.
 
 The first step to removing global state is to make it such that Play components have their dependencies provided to them, rather than looking them up statically.  This means providing out of the box support for dependency injection.
 
@@ -48,9 +48,9 @@ You can read about these new APIs here:
 
 It is now straightforward to embed a Play application.  Play 2.4 provides both APIs to start and stop a Play server, as well as routing DSLs for Java and Scala so that routes can be embedded directly in code.
 
-In Java, see [[Embedding Play|JavaEmbeddingPlay]] as well as information about the [[Routing DSL|JavaRoutingDSL]].
+In Java, see [[Embedding Play|ScalaEmbeddingPlayAkkaHttp]] as well as information about the [[Routing DSL|JavaRoutingDSL]].
 
-In Scala, see [[Embedding Play|ScalaEmbeddingPlay]] as well as information about the [[String Interpolating Routing DSL|ScalaSirdRouter]].
+In Scala, see [[Embedding Play|ScalaEmbeddingPlayAkkaHttp]] as well as information about the [[String Interpolating Routing DSL|ScalaSirdRouter]].
 
 ## Aggregated reverse routers
 

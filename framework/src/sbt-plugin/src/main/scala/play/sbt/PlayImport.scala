@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.sbt
 
@@ -33,6 +33,8 @@ object PlayImport {
 
   val javaCore = component("play-java")
 
+  val javaForms = component("play-java-forms")
+
   val javaJdbc = component("play-java-jdbc")
 
   def javaEbean = movedExternal(
@@ -45,13 +47,18 @@ object PlayImport {
 
   val cache = component("play-cache")
 
-  val json = component("play-json")
+  def json = movedExternal(
+    """play-json module has been moved to a separate project.
+      |See https://playframework.com/documentation/2.6.x/Migration26 for details.""".stripMargin)
 
-  val guiceSupport = component("play-guice")
+  val guice = component("play-guice")
 
-  val ws = component("play-ws")
+  val ws = component("play-ahc-ws")
 
-  val javaWs = component("play-java-ws")
+  // alias javaWs to ws
+  val javaWs = ws
+
+  val openId = component("play-openid")
 
   val specs2 = component("play-specs2")
 
@@ -119,5 +126,7 @@ object PlayImport {
 
     val playMonitoredFiles = TaskKey[Seq[File]]("playMonitoredFiles")
     val fileWatchService = SettingKey[FileWatchService]("fileWatchService", "The watch service Play uses to watch for file changes")
+
+    val includeDocumentationInBinary = SettingKey[Boolean]("includeDocumentationInBinary", "Includes the Documentation inside the distribution binary.")
   }
 }

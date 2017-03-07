@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.data
 
@@ -7,12 +7,12 @@ import play.api.{ Configuration, Environment }
 import play.api.data.Forms._
 import play.api.data.validation.Constraints._
 import play.api.data.format.Formats._
-import play.api.i18n.{ DefaultLangs, DefaultMessagesApi }
+import play.api.i18n._
 import play.api.libs.json.Json
 import org.specs2.mutable.Specification
-import org.joda.time.{ DateTime, LocalDate }
+import play.api.http.HttpConfiguration
 
-object FormSpec extends Specification {
+class FormSpec extends Specification {
   "A form" should {
     "have an error due to a malformed email" in {
       val f5 = ScalaForms.emailForm.fillAndValidate(("john@", "John"))
@@ -230,24 +230,6 @@ object FormSpec extends Specification {
     ScalaForms.helloForm.bind(Map("name" -> "foo", "repeat" -> "1")).get.toString must equalTo("(foo,1,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None)")
   }
 
-  "render form using jodaDate" in {
-    val dateForm = Form(("date" -> jodaDate))
-    val data = Map("date" -> "2012-01-01")
-    dateForm.bind(data).get mustEqual (new DateTime(2012, 1, 1, 0, 0))
-  }
-
-  "render form using jodaDate with format(30/1/2012)" in {
-    val dateForm = Form(("date" -> jodaDate("dd/MM/yyyy")))
-    val data = Map("date" -> "30/1/2012")
-    dateForm.bind(data).get mustEqual (new DateTime(2012, 1, 30, 0, 0))
-  }
-
-  "render form using jodaLocalDate with format(30/1/2012)" in {
-    val dateForm = Form(("date" -> jodaLocalDate("dd/MM/yyyy")))
-    val data = Map("date" -> "30/1/2012")
-    dateForm.bind(data).get mustEqual (new LocalDate(2012, 1, 30))
-  }
-
   "reject input if it contains global errors" in {
     Form("value" -> nonEmptyText).withGlobalError("some.error")
       .bind(Map("value" -> "some value"))
@@ -287,7 +269,11 @@ object FormSpec extends Specification {
   }
 
   "correctly lookup error messages when using errorsAsJson" in {
-    val messagesApi = new DefaultMessagesApi(Environment.simple(), Configuration.reference, new DefaultLangs(Configuration.reference))
+    val messagesApi: MessagesApi = {
+      val config = Configuration.reference
+      val langs = new DefaultLangsProvider(config).get
+      new DefaultMessagesApiProvider(Environment.simple(), config, langs, HttpConfiguration()).get
+    }
     implicit val messages = messagesApi.preferred(Seq.empty)
 
     val form = Form(single("foo" -> Forms.text), Map.empty, Seq(FormError("foo", "error.custom", Seq("error.customarg"))), None)

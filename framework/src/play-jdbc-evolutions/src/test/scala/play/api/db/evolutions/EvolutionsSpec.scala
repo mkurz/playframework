@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db.evolutions
 
@@ -8,9 +8,9 @@ import java.sql.{ ResultSet, SQLException }
 import org.specs2.mutable.{ After, Specification }
 import play.api.db.{ Database, Databases }
 
-// TODO: fuctional test with InvalidDatabaseRevision exception
+// TODO: functional test with InvalidDatabaseRevision exception
 
-object EvolutionsSpec extends Specification {
+class EvolutionsSpec extends Specification {
 
   sequential
 

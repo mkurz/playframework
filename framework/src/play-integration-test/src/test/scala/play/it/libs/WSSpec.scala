@@ -1,40 +1,39 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.libs
 
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.charset.{ Charset, StandardCharsets }
 import java.util
 import java.util.concurrent.TimeUnit
 
-import akka.stream.scaladsl.FileIO
+import akka.stream.scaladsl.{ FileIO, Sink, Source }
 import akka.util.ByteString
-import akka.stream.scaladsl.Source
-import akka.stream.scaladsl.Sink
-import org.asynchttpclient.{ RequestBuilderBase, SignatureCalculator }
+import play.shaded.ahc.org.asynchttpclient.{ RequestBuilderBase, SignatureCalculator }
 import play.api.http.Port
 import play.api.libs.json.JsString
 import play.api.libs.oauth._
+import play.api.libs.streams.Accumulator
+import play.api.libs.ws.WSBody
+import play.api.mvc.Results.Ok
 import play.api.mvc._
 import play.api.test._
 import play.core.server.Server
 import play.it._
 import play.it.tools.HttpBinApplication
-import play.api.mvc.Results.Ok
-import play.api.libs.streams.Accumulator
-import play.api.libs.ws.StreamedBody
-import play.libs.ws.WSResponse
 import play.mvc.Http
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.Future
+import scala.concurrent.{ Await, Future }
 
-object NettyWSSpec extends WSSpec with NettyIntegrationSpecification
+class NettyWSSpec extends WSSpec with NettyIntegrationSpecification
 
-object AkkaHttpWSSpec extends WSSpec with AkkaHttpIntegrationSpecification
+class AkkaHttpWSSpec extends WSSpec with AkkaHttpIntegrationSpecification
 
 trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   "Web service client" title
 
@@ -43,6 +42,15 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
   def app = HttpBinApplication.app
 
   val foldingSink = Sink.fold[ByteString, ByteString](ByteString.empty)((state, bs) => state ++ bs)
+
+  val isoString = {
+    // Converts the String "Hello €" to the ISO Counterparty
+    val sourceCharset = StandardCharsets.UTF_8
+    val buffer = ByteBuffer.wrap("Hello €".getBytes(sourceCharset))
+    val data = sourceCharset.decode(buffer)
+    val targetCharset = Charset.forName("Windows-1252")
+    new String(targetCharset.encode(data).array(), targetCharset)
+  }
 
   "WS@java" should {
 
@@ -54,31 +62,32 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
 
     def withEchoServer[T](block: play.libs.ws.WSClient => T) = {
       def echo = BodyParser { req =>
-        import play.api.libs.concurrent.Execution.Implicits.defaultContext
         Accumulator.source[ByteString].mapFuture { source =>
           Future.successful(source).map(Right.apply)
         }
       }
 
-      Server.withRouter() {
-        case _ => Action(echo) { req =>
+      Server.withRouterFromComponents()(components => {
+        case _ => components.defaultActionBuilder(echo) { req =>
           Ok.chunked(req.body)
         }
-      } { implicit port =>
+      }) { implicit port =>
         withClient(block)
       }
     }
 
     def withResult[T](result: Result)(block: play.libs.ws.WSClient => T) = {
-      Server.withRouter() {
-        case _ => Action(result)
+      Server.withRouterFromComponents() { components =>
+        {
+          case _ => components.defaultActionBuilder(result)
+        }
       } { implicit port =>
         withClient(block)
       }
     }
 
     def withClient[T](block: play.libs.ws.WSClient => T)(implicit port: Port): T = {
-      val wsClient = play.libs.ws.WS.newClient(port.value)
+      val wsClient = play.test.WSTestClient.newClient(port.value)
       try {
         block(wsClient)
       } finally {
@@ -87,11 +96,26 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
     }
 
     def withHeaderCheck[T](block: play.libs.ws.WSClient => T) = {
-      Server.withRouter() {
-        case _ => Action { req =>
-          val contentLength = req.headers.get(CONTENT_LENGTH)
-          val transferEncoding = req.headers.get(TRANSFER_ENCODING)
-          Ok(s"Content-Length: ${contentLength.getOrElse(-1)}; Transfer-Encoding: ${transferEncoding.getOrElse(-1)}")
+      Server.withRouterFromComponents() { components =>
+        {
+          case _ => components.defaultActionBuilder { req =>
+            val contentLength = req.headers.get(CONTENT_LENGTH)
+            val transferEncoding = req.headers.get(TRANSFER_ENCODING)
+            Ok(s"Content-Length: ${contentLength.getOrElse(-1)}; Transfer-Encoding: ${transferEncoding.getOrElse(-1)}")
+          }
+        }
+      } { implicit port =>
+        withClient(block)
+      }
+    }
+
+    def withXmlServer[T](block: play.libs.ws.WSClient => T) = {
+      Server.withRouterFromComponents() { components =>
+        {
+          case _ => components.defaultActionBuilder { req =>
+            val elem = <name>{ isoString }</name>.toString()
+            Ok(elem).as("application/xml;charset=Windows-1252")
+          }
         }
       } { implicit port =>
         withClient(block)
@@ -186,9 +210,9 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
     }
 
     "sending a multipart form body" in withServer { ws =>
-      val file = new File(this.getClass.getResource("/testassets/bar.txt").toURI)
+      val file = new File(this.getClass.getResource("/testassets/bar.txt").toURI).toPath
       val dp = new Http.MultipartFormData.DataPart("hello", "world")
-      val fp = new Http.MultipartFormData.FilePart("upload", "bar.txt", "text/plain", FileIO.fromFile(file).asJava)
+      val fp = new Http.MultipartFormData.FilePart("upload", "bar.txt", "text/plain", FileIO.fromPath(file).asJava)
       val source = akka.stream.javadsl.Source.from(util.Arrays.asList(dp, fp))
 
       val res = ws.url("/post").post(source)
@@ -198,8 +222,26 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
       body.path("file").textValue() must_== "This is a test asset."
     }
 
-    class CustomSigner extends WSSignatureCalculator with org.asynchttpclient.SignatureCalculator {
-      def calculateAndAddSignature(request: org.asynchttpclient.Request, requestBuilder: org.asynchttpclient.RequestBuilderBase[_]) = {
+    "response asXml with correct contentType" in withXmlServer { ws =>
+      val body = ws.url("/xml").get().toCompletableFuture.get().asXml()
+      new String(body.getElementsByTagName("name").item(0).getTextContent.getBytes("Windows-1252")) must_== isoString
+    }
+
+    "send a multipart request body via setMultipartBody" in withServer { ws =>
+      val file = new File(this.getClass.getResource("/testassets/bar.txt").toURI)
+      val dp = new Http.MultipartFormData.DataPart("hello", "world")
+      val fp = new Http.MultipartFormData.FilePart("upload", "bar.txt", "text/plain", FileIO.fromPath(file.toPath).asJava)
+      val source = akka.stream.javadsl.Source.from(util.Arrays.asList(dp, fp))
+
+      val res = ws.url("/post").setMultipartBody(source).setMethod("POST").execute()
+      val body = res.toCompletableFuture.get().asJson()
+
+      body.path("form").path("hello").textValue() must_== "world"
+      body.path("file").textValue() must_== "This is a test asset."
+    }
+
+    class CustomSigner extends WSSignatureCalculator with play.shaded.ahc.org.asynchttpclient.SignatureCalculator {
+      def calculateAndAddSignature(request: play.shaded.ahc.org.asynchttpclient.Request, requestBuilder: play.shaded.ahc.org.asynchttpclient.RequestBuilderBase[_]) = {
         // do nothing
       }
     }
@@ -220,8 +262,7 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
 
   "WS@scala" should {
 
-    import play.api.libs.ws.WSSignatureCalculator
-    import play.api.libs.ws.StreamedBody
+    import play.api.libs.ws.{ StreamedBody, WSSignatureCalculator }
 
     implicit val materializer = app.materializer
 
@@ -235,15 +276,16 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
 
     def withEchoServer[T](block: play.api.libs.ws.WSClient => T) = {
       def echo = BodyParser { req =>
-        import play.api.libs.concurrent.Execution.Implicits.defaultContext
         Accumulator.source[ByteString].mapFuture { source =>
           Future.successful(source).map(Right.apply)
         }
       }
 
-      Server.withRouter() {
-        case _ => Action(echo) { req =>
-          Ok.chunked(req.body)
+      Server.withRouterFromComponents() { components =>
+        {
+          case _ => components.defaultActionBuilder(echo) { req =>
+            Ok.chunked(req.body)
+          }
         }
       } { implicit port =>
         WsTestClient.withClient(block)
@@ -251,21 +293,25 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
     }
 
     def withResult[T](result: Result)(block: play.api.libs.ws.WSClient => T) = {
-      Server.withRouter() {
-        case _ => Action(result)
+      Server.withRouterFromComponents() { c =>
+        {
+          case _ => c.defaultActionBuilder(result)
+        }
       } { implicit port =>
         WsTestClient.withClient(block)
       }
     }
 
     def withHeaderCheck[T](block: play.api.libs.ws.WSClient => T) = {
-      Server.withRouter() {
-        case _ => Action { req =>
+      Server.withRouterFromComponents() { c =>
+        {
+          case _ => c.defaultActionBuilder { req =>
 
-          val contentLength = req.headers.get(CONTENT_LENGTH)
-          val transferEncoding = req.headers.get(TRANSFER_ENCODING)
-          Ok(s"Content-Length: ${contentLength.getOrElse(-1)}; Transfer-Encoding: ${transferEncoding.getOrElse(-1)}")
+            val contentLength = req.headers.get(CONTENT_LENGTH)
+            val transferEncoding = req.headers.get(TRANSFER_ENCODING)
+            Ok(s"Content-Length: ${contentLength.getOrElse(-1)}; Transfer-Encoding: ${transferEncoding.getOrElse(-1)}")
 
+          }
         }
       } { implicit port =>
         WsTestClient.withClient(block)
@@ -311,9 +357,9 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
     }
 
     "send a multipart request body" in withServer { ws =>
-      val file = new File(this.getClass.getResource("/testassets/foo.txt").toURI)
+      val file = new File(this.getClass.getResource("/testassets/foo.txt").toURI).toPath
       val dp = MultipartFormData.DataPart("hello", "world")
-      val fp = MultipartFormData.FilePart("upload", "foo.txt", None, FileIO.fromFile(file))
+      val fp = MultipartFormData.FilePart("upload", "foo.txt", None, FileIO.fromPath(file))
       val source = Source(List(dp, fp))
       val res = ws.url("/post").post(source)
       val body = await(res).json
@@ -322,8 +368,20 @@ trait WSSpec extends PlaySpecification with ServerIntegrationSpecification {
       (body \ "file").toOption must beSome(JsString("This is a test asset."))
     }
 
+    "send a multipart request body via withBody" in withServer { ws =>
+      val file = new File(this.getClass.getResource("/testassets/foo.txt").toURI)
+      val dp = MultipartFormData.DataPart("hello", "world")
+      val fp = MultipartFormData.FilePart("upload", "foo.txt", None, FileIO.fromPath(file.toPath))
+      val source = Source(List(dp, fp))
+      val res = ws.url("/post").withBody(source).withMethod("POST").execute()
+      val body = await(res).json
+
+      (body \ "form" \ "hello").toOption must beSome(JsString("world"))
+      (body \ "file").toOption must beSome(JsString("This is a test asset."))
+    }
+
     class CustomSigner extends WSSignatureCalculator with SignatureCalculator {
-      def calculateAndAddSignature(request: org.asynchttpclient.Request, requestBuilder: RequestBuilderBase[_]) = {
+      def calculateAndAddSignature(request: play.shaded.ahc.org.asynchttpclient.Request, requestBuilder: RequestBuilderBase[_]) = {
         // do nothing
       }
     }

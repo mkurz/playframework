@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.http
 
@@ -17,8 +17,8 @@ import play.it._
 import play.libs.{ Comet, EventSource, Json }
 import play.mvc.{ Http, Results }
 
-object NettyJavaResultsHandlingSpec extends JavaResultsHandlingSpec with NettyIntegrationSpecification
-object AkkaHttpJavaResultsHandlingSpec extends JavaResultsHandlingSpec with AkkaHttpIntegrationSpecification
+class NettyJavaResultsHandlingSpec extends JavaResultsHandlingSpec with NettyIntegrationSpecification
+class AkkaHttpJavaResultsHandlingSpec extends JavaResultsHandlingSpec with AkkaHttpIntegrationSpecification
 
 trait JavaResultsHandlingSpec extends PlaySpecification with WsTestClient with ServerIntegrationSpecification {
 
@@ -51,12 +51,13 @@ trait JavaResultsHandlingSpec extends PlaySpecification with WsTestClient with S
 
     "add cookies in Result" in makeRequest(new MockController {
       def action = {
-        Results.ok("Hello world").withCookies(
-          new Http.Cookie("bar", "KitKat", 1000, "/", "example.com", false, true)
-        )
+        Results.ok("Hello world")
+          .withCookies(new Http.Cookie("bar", "KitKat", 1000, "/", "example.com", false, true))
+          .withCookies(new Http.Cookie("framework", "Play", 1000, "/", "example.com", false, true))
       }
     }) { response =>
-      response.header("Set-Cookie").get must contain("bar=KitKat;")
+      response.allHeaders("Set-Cookie") must contain((s: String) => s.startsWith("bar=KitKat;"))
+      response.allHeaders("Set-Cookie") must contain((s: String) => s.startsWith("framework=Play;"))
       response.body must_== "Hello world"
     }
 

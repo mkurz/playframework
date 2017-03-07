@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db.evolutions
 
@@ -254,7 +254,8 @@ case class DefaultEvolutionsDatasourceConfig(
 /**
  * Default evolutions configuration.
  */
-class DefaultEvolutionsConfig(defaultDatasourceConfig: EvolutionsDatasourceConfig,
+class DefaultEvolutionsConfig(
+    defaultDatasourceConfig: EvolutionsDatasourceConfig,
     datasources: Map[String, EvolutionsDatasourceConfig]) extends EvolutionsConfig {
   def forDatasource(db: String) = datasources.getOrElse(db, defaultDatasourceConfig)
 }
@@ -331,8 +332,8 @@ class DefaultEvolutionsConfigParser @Inject() (rootConfig: Configuration) extend
    * Convert configuration sections of key-boolean pairs to a set of enabled keys.
    */
   def enabledKeys(configuration: Configuration, section: String): Set[String] = {
-    configuration.getConfig(section).fold(Set.empty[String]) { conf =>
-      conf.keys.filter(conf.getBoolean(_).getOrElse(false))
+    configuration.getOptional[Configuration](section).fold(Set.empty[String]) { conf =>
+      conf.keys.filter(conf.getOptional[Boolean](_).getOrElse(false))
     }
   }
 }
@@ -396,7 +397,7 @@ case class InvalidDatabaseRevision(db: String, script: String) extends PlayExcep
   def content = script
 
   private val javascript = """
-        window.location = window.location.href.replace(/\/@evolutions.*$|\/$/, '') + '/@evolutions/apply/%s?redirect=' + encodeURIComponent(location)
+        window.location = window.location.href.split(/[?#]/)[0].replace(/\/@evolutions.*$|\/$/, '') + '/@evolutions/apply/%s?redirect=' + encodeURIComponent(location)
     """.format(db).trim
 
   def htmlDescription = {

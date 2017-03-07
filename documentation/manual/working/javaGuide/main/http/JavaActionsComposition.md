@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Action composition
 
 This chapter introduces several ways to define generic action functionality.
@@ -9,7 +9,7 @@ Previously, we said that an action is a Java method that returns a `play.mvc.Res
 
 ```java
 public abstract class Action {
-  public abstract CompletionStage<Result> call(Context ctx) throws Throwable;
+  public abstract CompletionStage<Result> call(Context ctx);
 }
 ```
 

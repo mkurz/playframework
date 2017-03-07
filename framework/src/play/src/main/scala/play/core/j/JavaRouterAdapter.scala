@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.j
 
@@ -21,5 +21,5 @@ class JavaRouterAdapter @Inject() (underlying: play.api.routing.Router) extends 
     case (httpMethod, pathPattern, controllerMethodInvocation) =>
       new RouteDocumentation(httpMethod, pathPattern, controllerMethodInvocation)
   }.asJava
-  def asScala = underlying
+  override def asScala = underlying
 }

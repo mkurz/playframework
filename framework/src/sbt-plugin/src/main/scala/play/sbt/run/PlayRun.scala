@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.sbt.run
 
@@ -14,9 +14,8 @@ import play.sbt.PlayImport._
 import play.sbt.PlayImport.PlayKeys._
 import play.sbt.PlayInternalKeys._
 import play.sbt.Colors
-import play.core.{ Build, BuildLink, BuildDocHandler }
-import play.runsupport.classloader._
-import play.runsupport.{ AssetsClassLoader, FileWatchService, Reloader }
+import play.core.BuildLink
+import play.runsupport.{ AssetsClassLoader, Reloader }
 
 import com.typesafe.sbt.packager.universal.UniversalPlugin.autoImport._
 import com.typesafe.sbt.packager.Keys.executableScriptName
@@ -47,7 +46,8 @@ object PlayRun {
    * Do not change its signature without first consulting the Activator team.  Do not change its signature in a minor
    * release.
    */
-  def playRunTask(runHooks: TaskKey[Seq[play.sbt.PlayRunHook]],
+  def playRunTask(
+    runHooks: TaskKey[Seq[play.sbt.PlayRunHook]],
     dependencyClasspath: TaskKey[Classpath], dependencyClassLoader: TaskKey[ClassLoaderCreator],
     reloaderClasspath: TaskKey[Classpath], reloaderClassLoader: TaskKey[ClassLoaderCreator],
     assetsClassLoader: TaskKey[ClassLoader => ClassLoader]): Def.Initialize[InputTask[Unit]] = Def.inputTask {
@@ -100,7 +100,7 @@ object PlayRun {
         devModeServer
 
         println()
-        println(Colors.green("(Server started, use Ctrl+D to stop and go back to the console...)"))
+        println(Colors.green("(Server started, use Enter to stop and go back to the console...)"))
         println()
 
         // If we have both Watched.Configuration and Watched.ContinuousState

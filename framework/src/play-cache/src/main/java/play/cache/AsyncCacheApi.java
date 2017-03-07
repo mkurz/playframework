@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.cache;
 
@@ -25,7 +25,7 @@ public interface AsyncCacheApi {
      *
      * @param <T> the type of the stored object
      * @param key the key to look up
-     * @return the object or null
+     * @return a CompletionStage containing the value
      */
     <T> CompletionStage<T> get(String key);
 
@@ -58,6 +58,7 @@ public interface AsyncCacheApi {
      * @param key Item key.
      * @param value The value to set.
      * @param expiration expiration in seconds
+     * @return a CompletionStage containing the value
      */
     CompletionStage<Done> set(String key, Object value, int expiration);
 
@@ -66,6 +67,7 @@ public interface AsyncCacheApi {
      *
      * @param key Item key.
      * @param value The value to set.
+     * @return a CompletionStage containing the value
      */
     CompletionStage<Done> set(String key, Object value);
 
@@ -73,6 +75,7 @@ public interface AsyncCacheApi {
      * Removes a value from the cache.
      *
      * @param key The key to remove the value for.
+     * @return a CompletionStage containing the value
      */
     CompletionStage<Done> remove(String key);
 }

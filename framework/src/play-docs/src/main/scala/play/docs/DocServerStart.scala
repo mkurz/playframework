@@ -1,15 +1,18 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.docs
 
 import java.io.File
 import java.util.concurrent.Callable
+
 import play.api._
+import play.api.http.FileMimeTypes
 import play.api.mvc._
 import play.api.routing.Router
 import play.core._
 import play.core.server._
+
 import scala.concurrent.Future
 import scala.util.Success
 
@@ -33,7 +36,8 @@ class DocServerStart {
     Play.start(application)
 
     val applicationProvider = new ApplicationProvider {
-
+      implicit val ec = application.actorSystem.dispatcher
+      implicit val fileMimeTypes = application.injector.instanceOf[FileMimeTypes]
       override def get = Success(application)
       override def handleWebCommand(request: RequestHeader) =
         buildDocHandler.maybeHandleDocRequest(request).asInstanceOf[Option[Result]].orElse(

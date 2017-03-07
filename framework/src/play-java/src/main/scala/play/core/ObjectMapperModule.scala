@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core
 
@@ -18,12 +18,9 @@ import scala.concurrent.Future
  * This solves the issue of the ObjectMapper cache from holding references to the application class loader between
  * reloads.
  */
-class ObjectMapperModule extends Module {
-
-  def bindings(environment: Environment, configuration: Configuration) = Seq(
-    bind[ObjectMapper].toProvider[ObjectMapperProvider].eagerly()
-  )
-}
+class ObjectMapperModule extends SimpleModule(
+  bind[ObjectMapper].toProvider[ObjectMapperProvider].eagerly
+)
 
 @Singleton
 class ObjectMapperProvider @Inject() (lifecycle: ApplicationLifecycle) extends Provider[ObjectMapper] {

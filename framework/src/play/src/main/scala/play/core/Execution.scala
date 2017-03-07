@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core
 
 import java.util.concurrent.ForkJoinPool
-import play.api.{ Application, Play }
+import play.api.Play
 import scala.concurrent.{ ExecutionContext, ExecutionContextExecutor }
 
 /**
@@ -12,6 +12,11 @@ import scala.concurrent.{ ExecutionContext, ExecutionContextExecutor }
  */
 private[play] object Execution {
 
+  /**
+   * @deprecated Use the application execution context.
+   * @return the actorsystem's execution context
+   */
+  @deprecated("Use an injected execution context", "2.6.0")
   def internalContext: ExecutionContextExecutor = {
     Play.privateMaybeApplication match {
       case None => common
@@ -22,10 +27,7 @@ private[play] object Execution {
   def trampoline = play.api.libs.streams.Execution.trampoline
 
   object Implicits {
-
-    implicit def internalContext = Execution.internalContext
-    implicit def trampoline = play.api.libs.streams.Execution.trampoline
-
+    implicit def trampoline = Execution.trampoline
   }
 
   /**

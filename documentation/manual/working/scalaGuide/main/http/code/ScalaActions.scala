@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package scalaguide.http.scalaactions {
 
@@ -12,7 +12,7 @@ import play.api.libs.json._
 import scala.concurrent.Future
 import org.specs2.execute.AsResult
 
-object ScalaActionsSpec extends Specification with Controller {
+class ScalaActionsSpec extends Specification with Controller {
 
   "A scala action" should {
     "allow writing a simple echo action" in {

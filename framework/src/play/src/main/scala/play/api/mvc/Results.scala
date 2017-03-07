@@ -1,22 +1,25 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{ Files, Path }
+import java.time.format.DateTimeFormatter
+import java.time.{ ZoneOffset, ZonedDateTime }
 
 import akka.stream.scaladsl.{ FileIO, Source, StreamConverters }
 import akka.util.ByteString
-import org.joda.time.format.{ DateTimeFormat, DateTimeFormatter }
-import org.joda.time.{ DateTime, DateTimeZone }
 import play.api.http.HeaderNames._
-import play.api.http._
+import play.api.http.{ FileMimeTypes, _ }
 import play.api.i18n.{ Lang, MessagesApi }
+import play.api.{ Logger, Mode }
 import play.core.utils.CaseInsensitiveOrdered
 import play.utils.UriEncoding
 
+import scala.collection.JavaConverters._
 import scala.collection.immutable.TreeMap
+import scala.concurrent.ExecutionContext
 
 /**
  * A simple HTTP response header, used for standard responses.
@@ -28,7 +31,7 @@ import scala.collection.immutable.TreeMap
  */
 final class ResponseHeader(val status: Int, _headers: Map[String, String] = Map.empty, val reasonPhrase: Option[String] = None) {
   private[play] def this(status: Int, _headers: java.util.Map[String, String], reasonPhrase: Option[String]) =
-    this(status, collection.JavaConversions.mapAsScalaMap(_headers).toMap, reasonPhrase)
+    this(status, _headers.asScala.toMap, reasonPhrase)
 
   val headers: Map[String, String] = TreeMap[String, String]()(CaseInsensitiveOrdered) ++ _headers
 
@@ -47,13 +50,17 @@ final class ResponseHeader(val status: Int, _headers: Map[String, String] = Map.
     case ResponseHeader(s, h, r) => (s, h, r).equals((status, headers, reasonPhrase))
     case _ => false
   }
+
+  def asJava: play.mvc.ResponseHeader = {
+    new play.mvc.ResponseHeader(status, headers.asJava, reasonPhrase.orNull)
+  }
 }
 object ResponseHeader {
   val basicDateFormatPattern = "EEE, dd MMM yyyy HH:mm:ss"
   val httpDateFormat: DateTimeFormatter =
-    DateTimeFormat.forPattern(basicDateFormatPattern + " 'GMT'")
+    DateTimeFormatter.ofPattern(basicDateFormatPattern + " 'GMT'")
       .withLocale(java.util.Locale.ENGLISH)
-      .withZone(DateTimeZone.UTC)
+      .withZone(ZoneOffset.UTC)
 
   def apply(status: Int, headers: Map[String, String] = Map.empty, reasonPhrase: Option[String] = None): ResponseHeader =
     new ResponseHeader(status, headers)
@@ -67,7 +74,8 @@ object ResponseHeader {
  * @param header the response header, which contains status code and HTTP headers
  * @param body the response body
  */
-case class Result(header: ResponseHeader, body: HttpEntity) {
+case class Result(header: ResponseHeader, body: HttpEntity,
+    newSession: Option[Session] = None, newFlash: Option[Flash] = None, newCookies: Seq[Cookie] = Seq.empty) {
 
   /**
    * Adds headers to this result.
@@ -89,9 +97,9 @@ case class Result(header: ResponseHeader, body: HttpEntity) {
    * @param headers the headers with a DateTime to add to this result.
    * @return the new result.
    */
-  def withDateHeaders(headers: (String, DateTime)*): Result = {
+  def withDateHeaders(headers: (String, ZonedDateTime)*): Result = {
     copy(header = header.copy(headers = header.headers ++ headers.map {
-      case (name, dateTime) => (name, ResponseHeader.httpDateFormat.print(dateTime.getMillis))
+      case (name, dateTime) => (name, dateTime.format(ResponseHeader.httpDateFormat))
     }))
   }
 
@@ -108,9 +116,7 @@ case class Result(header: ResponseHeader, body: HttpEntity) {
    * @return the new result
    */
   def withCookies(cookies: Cookie*): Result = {
-    if (cookies.isEmpty) this else {
-      withHeaders(SET_COOKIE -> Cookies.mergeSetCookieHeader(header.headers.getOrElse(SET_COOKIE, ""), cookies))
-    }
+    if (cookies.isEmpty) this else copy(newCookies = newCookies ++ cookies)
   }
 
   /**
@@ -125,7 +131,7 @@ case class Result(header: ResponseHeader, body: HttpEntity) {
    * @return the new result
    */
   def discardingCookies(cookies: DiscardingCookie*): Result = {
-    withHeaders(SET_COOKIE -> Cookies.mergeSetCookieHeader(header.headers.getOrElse(SET_COOKIE, ""), cookies.map(_.toCookie)))
+    withCookies(newCookies ++ cookies.map(_.toCookie): _*)
   }
 
   /**
@@ -139,9 +145,7 @@ case class Result(header: ResponseHeader, body: HttpEntity) {
    * @param session the session to set with this result
    * @return the new result
    */
-  def withSession(session: Session): Result = {
-    if (session.isEmpty) discardingCookies(Session.discard) else withCookies(Session.encodeAsCookie(session))
-  }
+  def withSession(session: Session): Result = copy(newSession = Some(session))
 
   /**
    * Sets a new session for this result, discarding the existing session.
@@ -180,10 +184,8 @@ case class Result(header: ResponseHeader, body: HttpEntity) {
    * @return the new result
    */
   def flashing(flash: Flash): Result = {
-    if (shouldWarnIfNotRedirect(flash)) {
-      logRedirectWarning("flashing")
-    }
-    withCookies(Flash.encodeAsCookie(flash))
+    warnFlashingIfNotRedirect(flash)
+    copy(newFlash = Some(flash))
   }
 
   /**
@@ -216,11 +218,7 @@ case class Result(header: ResponseHeader, body: HttpEntity) {
    * @param request Current request
    * @return The session carried by this result. Reads the request’s session if this result does not modify the session.
    */
-  def session(implicit request: RequestHeader): Session =
-    Cookies.fromCookieHeader(header.headers.get(SET_COOKIE)).get(Session.COOKIE_NAME) match {
-      case Some(cookie) => Session.decodeFromCookie(Some(cookie))
-      case None => request.session
-    }
+  def session(implicit request: RequestHeader): Session = newSession getOrElse request.session
 
   /**
    * Example:
@@ -251,25 +249,51 @@ case class Result(header: ResponseHeader, body: HttpEntity) {
   }
 
   /**
-   * Returns true if the status code is not 3xx and the application is in Dev mode.
+   * Logs a redirect warning for flashing (in dev mode) if the status code is not 3xx
    */
-  private def shouldWarnIfNotRedirect(flash: Flash): Boolean = {
-    play.api.Play.privateMaybeApplication.exists(app =>
-      (app.mode == play.api.Mode.Dev) && (!flash.isEmpty) && (header.status < 300 || header.status > 399))
-  }
-
-  /**
-   * Logs a redirect warning.
-   */
-  private def logRedirectWarning(methodName: String) {
-    val status = header.status
-    play.api.Logger("play").warn(s"You are using status code '$status' with $methodName, which should only be used with a redirect status!")
+  @inline private def warnFlashingIfNotRedirect(flash: Flash): Unit = {
+    if (!flash.isEmpty && !Status.isRedirect(header.status)) {
+      Logger("play").forMode(Mode.Dev).warn(
+        s"You are using status code '${header.status}' with flashing, which should only be used with a redirect status!"
+      )
+    }
   }
 
   /**
    * Convert this result to a Java result.
    */
-  def asJava: play.mvc.Result = new play.mvc.Result(header, body.asJava)
+  def asJava: play.mvc.Result = new play.mvc.Result(header.asJava, body.asJava,
+    newSession.map(_.asJava).orNull, newFlash.map(_.asJava).orNull, newCookies.map(_.asJava).asJava)
+
+  /**
+   * Encode the cookies into the Set-Cookie header. The session is always baked first, followed by the flash cookie,
+   * followed by all the other cookies in order.
+   */
+  def bakeCookies(
+    cookieHeaderEncoding: CookieHeaderEncoding = new DefaultCookieHeaderEncoding(),
+    sessionBaker: CookieBaker[Session] = new DefaultSessionCookieBaker(),
+    flashBaker: CookieBaker[Flash] = new DefaultFlashCookieBaker(),
+    requestHasFlash: Boolean = false): Result = {
+
+    val allCookies = {
+      val setCookieCookies = Cookies.decodeSetCookieHeader(header.headers.getOrElse(SET_COOKIE, ""))
+      val session = newSession.map { data =>
+        if (data.isEmpty) sessionBaker.discard.toCookie else sessionBaker.encodeAsCookie(data)
+      }
+      val flash = newFlash.map { data =>
+        if (data.isEmpty) flashBaker.discard.toCookie else flashBaker.encodeAsCookie(data)
+      }.orElse {
+        if (requestHasFlash) Some(flashBaker.discard.toCookie) else None
+      }
+      setCookieCookies ++ session ++ flash ++ newCookies
+    }
+
+    if (allCookies.isEmpty) {
+      this
+    } else {
+      withHeaders(SET_COOKIE -> Cookies.encodeSetCookieHeader(allCookies))
+    }
+  }
 }
 
 /**
@@ -375,9 +399,10 @@ trait Results {
       )
     }
 
-    private def streamFile(file: Source[ByteString, _], name: String, length: Long, inline: Boolean): Result = {
+    private def streamFile(file: Source[ByteString, _], name: String, length: Long, inline: Boolean)(implicit fileMimeTypes: FileMimeTypes): Result = {
       Result(
-        ResponseHeader(status,
+        ResponseHeader(
+          status,
           Map(
             CONTENT_DISPOSITION -> {
               val dispositionType = if (inline) "inline" else "attachment"
@@ -388,7 +413,7 @@ trait Results {
         HttpEntity.Streamed(
           file,
           Some(length),
-          play.api.libs.MimeTypes.forFileName(name).orElse(Some(play.api.http.ContentTypes.BINARY))
+          fileMimeTypes.forFileName(name).orElse(Some(play.api.http.ContentTypes.BINARY))
         )
       )
     }
@@ -400,8 +425,8 @@ trait Results {
      * @param inline Use Content-Disposition inline or attachment.
      * @param fileName Function to retrieve the file name. By default the name of the file is used.
      */
-    def sendFile(content: java.io.File, inline: Boolean = true, fileName: java.io.File => String = _.getName, onClose: () => Unit = () => ()): Result = {
-      streamFile(FileIO.fromFile(content), fileName(content), content.length, inline)
+    def sendFile(content: java.io.File, inline: Boolean = true, fileName: java.io.File => String = _.getName, onClose: () => Unit = () => ())(implicit ec: ExecutionContext, fileMimeTypes: FileMimeTypes): Result = {
+      sendPath(content.toPath, inline, (p: Path) => fileName(p.toFile), onClose)
     }
 
     /**
@@ -411,8 +436,11 @@ trait Results {
      * @param inline Use Content-Disposition inline or attachment.
      * @param fileName Function to retrieve the file name. By default the name of the file is used.
      */
-    def sendPath(content: Path, inline: Boolean = true, fileName: Path => String = _.getFileName.toString, onClose: () => Unit = () => ()): Result = {
-      streamFile(FileIO.fromFile(content.toFile), fileName(content), Files.size(content), inline)
+    def sendPath(content: Path, inline: Boolean = true, fileName: Path => String = _.getFileName.toString, onClose: () => Unit = () => ())(implicit ec: ExecutionContext, fileMimeTypes: FileMimeTypes): Result = {
+      val io = FileIO.fromPath(content).mapMaterializedValue(_.onComplete { _ =>
+        onClose()
+      })
+      streamFile(io, fileName(content), Files.size(content), inline)(fileMimeTypes)
     }
 
     /**
@@ -422,7 +450,7 @@ trait Results {
      * @param classLoader The classloader to load it from, defaults to the classloader for this class.
      * @param inline Whether it should be served as an inline file, or as an attachment.
      */
-    def sendResource(resource: String, classLoader: ClassLoader = Results.getClass.getClassLoader, inline: Boolean = true): Result = {
+    def sendResource(resource: String, classLoader: ClassLoader = Results.getClass.getClassLoader, inline: Boolean = true)(implicit fileMimeTypes: FileMimeTypes): Result = {
       val stream = classLoader.getResourceAsStream(resource)
       val fileName = resource.split('/').last
       streamFile(StreamConverters.fromInputStream(() => stream), fileName, stream.available(), inline)
@@ -456,6 +484,12 @@ trait Results {
       )
     }
   }
+
+  /** Generates a ‘100 Continue’ result. */
+  val Continue = Result(header = ResponseHeader(CONTINUE), body = HttpEntity.NoEntity)
+
+  /** Generates a ‘101 Switching Protocols’ result. */
+  val SwitchingProtocols = Result(header = ResponseHeader(SWITCHING_PROTOCOLS), body = HttpEntity.NoEntity)
 
   /** Generates a ‘200 OK’ result. */
   val Ok = new Status(OK)
@@ -577,7 +611,7 @@ trait Results {
   val TooManyRequests = new Status(TOO_MANY_REQUESTS)
 
   /** Generates a ‘429 TOO_MANY_REQUEST’ result. */
-  @deprecated("Use TooManyRequests instead", "3.0.0")
+  @deprecated("Use TooManyRequests instead", "2.6.0")
   val TooManyRequest = TooManyRequests
 
   /** Generates a ‘500 INTERNAL_SERVER_ERROR’ result. */
@@ -638,7 +672,7 @@ trait Results {
    *
    * @param call Call defining the URL to redirect to, which typically comes from the reverse router
    */
-  def Redirect(call: Call): Result = Redirect(call.url)
+  def Redirect(call: Call): Result = Redirect(call.path)
 
   /**
    * Generates a redirect simple result.
@@ -646,6 +680,6 @@ trait Results {
    * @param call Call defining the URL to redirect to, which typically comes from the reverse router
    * @param status HTTP status for redirect, such as SEE_OTHER, MOVED_TEMPORARILY or MOVED_PERMANENTLY
    */
-  def Redirect(call: Call, status: Int): Result = Redirect(call.url, Map.empty, status)
+  def Redirect(call: Call, status: Int): Result = Redirect(call.path, Map.empty, status)
 
 }

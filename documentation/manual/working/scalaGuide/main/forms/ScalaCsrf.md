@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Protecting against Cross Site Request Forgery
 
 Cross Site Request Forgery (CSRF) is a security exploit where an attacker tricks a victims browser into making a request using the victims session.  Since the session token is sent with every request, if an attacker can coerce the victims browser to make a request on their behalf, the attacker can make requests on the users behalf.
@@ -55,6 +55,39 @@ The `Filters` class can either be in the root package, or if it has another name
 
 ```
 play.http.filters = "filters.MyFilters"
+```
+
+### Using an implicit request
+
+All CSRF functionality assumes that a `RequestHeader` or a `Request` is available in implicit scope, and will not compile without one available. 
+
+#### Defining an implicit Request in Actions
+
+For all the CSRF actions, the request must be exposed implicitly with `implicit request =>` as follows:
+
+``` scala
+def someMethod = SomeCSRFAction { implicit request =>
+  ... // methods that depend on an implicit request
+}
+```
+
+#### Passing an implicit Request between methods
+
+If you have broken up your code into methods that CSRF functionality is used in, then you can pass through the implicit request from the action:
+
+```scala
+def someMethod(...)(implicit request: Request[_]) = {
+  val token: Option[CSRF.Token] = CSRF.getToken
+  ... // do more things
+}
+```
+
+#### Defining an implicit Requests in Templates
+
+Your HTML template should have an implicit `Request` parameter to your template, if it doesn't have one already:
+
+```html
+@(...)(implicit request: Request[_])
 ```
 
 ### Getting the current token
@@ -129,3 +162,7 @@ The full range of CSRF configuration options can be found in the filters [refere
 * `play.filters.csrf.cookie.secure` - If `play.filters.csrf.cookie.name` is set, whether the CSRF cookie should have the secure flag set.  Defaults to the same value as `play.http.session.secure`.
 * `play.filters.csrf.body.bufferSize` - In order to read tokens out of the body, Play must first buffer the body and potentially parse it.  This sets the maximum buffer size that will be used to buffer the body.  Defaults to 100k.
 * `play.filters.csrf.token.sign` - Whether Play should use signed CSRF tokens.  Signed CSRF tokens ensure that the token value is randomised per request, thus defeating BREACH style attacks.
+
+## Using CSRF with compile time dependency injection
+
+You can use all the above features if your application is using compile time dependency injection. The wiring is helped by the trait [CSRFComponents](api/scala/play/filters/csrf/CSRFComponents.html) that you can mix in your application components cake. For more details about compile time dependency injection, please refer to the [[associated documentation page|ScalaCompileTimeDependencyInjection]].

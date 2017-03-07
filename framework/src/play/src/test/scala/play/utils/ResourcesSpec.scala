@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.utils
 
@@ -13,7 +13,7 @@ import play.api.PlayCoreTestApplication
 /**
  * Tests for Resources object
  */
-object ResourcesSpec extends Specification {
+class ResourcesSpec extends Specification {
   import Resources._
 
   lazy val app = PlayCoreTestApplication()
@@ -96,7 +96,7 @@ object ResourcesSpec extends Specification {
       isDirectory(classloader, url) must beFalse
     }
 
-    "return true for a directory reource URL with the 'bundle' protocol" in {
+    "return true for a directory resource URL with the 'bundle' protocol" in {
       val relativeIndex = dirBundle.getAbsolutePath.indexOf("test-bundle-")
       val dir = dirBundle.getAbsolutePath.substring(relativeIndex)
       val url = new URL("bundle", "325.0", 25, dir, new BundleStreamHandler)

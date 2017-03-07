@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package play.it.action
 
 import akka.stream.scaladsl.Source
-import io.netty.handler.codec.http.HttpHeaders
+import play.shaded.ahc.io.netty.handler.codec.http.HttpHeaders
 import org.specs2.mutable.Specification
 import play.api.Play
 import play.api.http.HeaderNames._
@@ -19,11 +19,13 @@ import play.api.test._
 import play.core.server.Server
 import play.it._
 import play.it.tools.HttpBinApplication._
-import scala.concurrent.ExecutionContext.Implicits.global
-import org.asynchttpclient.netty.NettyResponse
 
-object NettyHeadActionSpec extends HeadActionSpec with NettyIntegrationSpecification
-object AkkaHttpHeadActionSpec extends HeadActionSpec with AkkaHttpIntegrationSpecification
+import scala.concurrent.ExecutionContext.Implicits.global
+import play.shaded.ahc.org.asynchttpclient.netty.NettyResponse
+import play.api.libs.typedmap.TypedKey
+
+class NettyHeadActionSpec extends HeadActionSpec with NettyIntegrationSpecification
+class AkkaHttpHeadActionSpec extends HeadActionSpec with AkkaHttpIntegrationSpecification
 
 trait HeadActionSpec extends Specification with FutureAwaits with DefaultAwaitTimeout with ServerIntegrationSpecification {
 
@@ -34,14 +36,14 @@ trait HeadActionSpec extends Specification with FutureAwaits with DefaultAwaitTi
 
   "HEAD requests" should {
 
-    val chunkedResponse: Routes = {
+    def chunkedResponse(implicit Action: DefaultActionBuilder): Routes = {
       case GET(p"/chunked") =>
         Action { request =>
           Results.Ok.chunked(Source(List("a", "b", "c")))
         }
     }
 
-    val routes =
+    def routes(implicit Action: DefaultActionBuilder) =
       get // GET /get
         .orElse(patch) // PATCH /patch
         .orElse(post) // POST /post
@@ -52,17 +54,15 @@ trait HeadActionSpec extends Specification with FutureAwaits with DefaultAwaitTi
 
     def withServer[T](block: WSClient => T): T = {
       // Routes from HttpBinApplication
-      Server.withRouter()(routes) { implicit port =>
-        implicit val mat = Play.current.materializer
+      Server.withRouterFromComponents()(components => routes(components.defaultActionBuilder)) { implicit port =>
         WsTestClient.withClient(block)
       }
     }
 
-    def serverWithAction[T](action: EssentialAction)(block: WSClient => T): T = {
+    def serverWithHandler[T](handler: Handler)(block: WSClient => T): T = {
       Server.withRouter() {
-        case _ => action
+        case _ => handler
       } { implicit port =>
-        implicit val mat = Play.current.materializer
         WsTestClient.withClient(block)
       }
     }
@@ -121,16 +121,42 @@ trait HeadActionSpec extends Specification with FutureAwaits with DefaultAwaitTi
       foreach(responseList)((_: WSResponse).status must_== NOT_FOUND)
     }
 
-    "tag request with DefaultHttpRequestHandler" in serverWithAction(new RequestTaggingHandler with EssentialAction {
-      def tagRequest(request: RequestHeader) = request.copy(tags = Map(RouteComments -> "some comment"))
-      def apply(rh: RequestHeader) = Action {
-        Results.Ok.withHeaders(rh.tags.get(RouteComments).map(RouteComments -> _).toSeq: _*)
-      }(rh)
+    val CustomAttr = TypedKey[String]("CustomAttr")
+    def addCustomTagAndAttr(r: RequestHeader): RequestHeader = {
+      val withTags = r.copy(tags = Map("CustomTag" -> "x"))
+      val withAttrs = withTags.withAttrs(withTags.attrs.updated(CustomAttr, "y"))
+      withAttrs
+    }
+    val tagAndAttrAction = ActionBuilder.ignoringBody { rh: RequestHeader =>
+      val tagComment = rh.tags.get("CustomTag")
+      val attrComment = rh.attrs.get(CustomAttr)
+      val headers = Array.empty[(String, String)] ++
+        rh.tags.get("CustomTag").map("CustomTag" -> _) ++
+        rh.attrs.get(CustomAttr).map("CustomAttr" -> _)
+      Results.Ok.withHeaders(headers: _*)
+    }
+
+    "tag request with DefaultHttpRequestHandler" in serverWithHandler(new RequestTaggingHandler with EssentialAction {
+      def tagRequest(request: RequestHeader) = addCustomTagAndAttr(request)
+      def apply(rh: RequestHeader) = tagAndAttrAction(rh)
     }) { client =>
       val result = await(client.url("/get").head())
       result.status must_== OK
-      result.header(RouteComments) must beSome("some comment")
+      result.header("CustomTag") must beSome("x")
+      result.header("CustomAttr") must beSome("y")
     }
+
+    "modify request with DefaultHttpRequestHandler" in serverWithHandler(
+      Handler.Stage.modifyRequest(
+        (rh: RequestHeader) => addCustomTagAndAttr(rh),
+        tagAndAttrAction
+      )
+    ) { client =>
+        val result = await(client.url("/get").head())
+        result.status must_== OK
+        result.header("CustomTag") must beSome("x")
+        result.header("CustomAttr") must beSome("y")
+      }
 
     "omit Content-Length for chunked responses" in withServer { client =>
       val response = await(client.url("/chunked").head())

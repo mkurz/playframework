@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Play 2.5 Migration Guide
 
 This is a guide for migrating from Play 2.4 to Play 2.5. If you need to migrate from an earlier version of Play then you must first follow the [[Play 2.4 Migration Guide|Migration24]].
@@ -7,6 +7,8 @@ As well as the information contained on this page, there is more detailed migrat
 
 - [[Streams Migration Guide|StreamsMigration25]] – Migrating to Akka Streams, now used in place of iteratees in many Play APIs
 - [[Java Migration Guide|JavaMigration25]] - Migrating Java applications. Play now uses native Java types for functional types and offers several new customizable components in Java.
+
+Lucidchart has also put together an informative blog post on [upgrading from Play 2.3.x to Play 2.5.x](https://www.lucidchart.com/techblog/2017/02/22/upgrading-play-framework-2-3-play-2-5/).
 
 ## How to migrate
 
@@ -82,14 +84,14 @@ Play 2.3 and 2.4 supported both Scala 2.10 and 2.11. Play 2.5 has dropped suppor
 To set the Scala version in sbt, simply set the `scalaVersion` key, eg:
 
 ```scala
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 ```
 
 If you have a single project build, then this setting can just be placed on its own line in `build.sbt`.  However, if you have a multi project build, then the scala version setting must be set on each project.  Typically, in a multi project build, you will have some common settings shared by every project, this is the best place to put the setting, eg:
 
 ```scala
 def common = Seq(
-  scalaVersion := "2.11.7"
+  scalaVersion := "2.11.8"
 )
 
 lazy val projectA = (project in file("projectA"))
@@ -112,7 +114,8 @@ You will need to update your Logback configuration files (`logback*.xml`) and ch
 The new configuration after the change will look something like this:
 
 ```xml
-<conversionRule conversionWord="coloredLevel" converterClass="play.api.libs.logback.ColoredLevel" />
+<conversionRule conversionWord="coloredLevel"
+  converterClass="play.api.libs.logback.ColoredLevel" />
 ```
 
 If you use compile time dependency injection, you will need to change your application loader from using `Logger.configure(...)` to the following:
@@ -140,7 +143,7 @@ In addition, there are number of small changes:
 * The deprecated interface `play.libs.ws.WSRequestHolder` has been removed.
 * The `play.libs.ws.play.WSRequest` interface now returns `java.util.concurrent.CompletionStage` instead of `F.Promise`.
 * Static methods that rely on `Play.current` or `Play.application` have been deprecated.
-* Play WS would infer a charset from the content type and append a charset to the `Content-Type` header of the request if one was not already set.  This caused some confusion and bugs, and so in 2.5.x the `Content-Type` header does not automatically include an inferred charset.  If you explicitly set a `Content-Type` header, the setting is honored as is. 
+* Play WS would infer a charset from the content type and append a charset to the `Content-Type` header of the request if one was not already set.  This caused some confusion and bugs, and so in 2.5.x the `Content-Type` header does not automatically include an inferred charset.  If you explicitly set a `Content-Type` header, the setting is honored as is.
 
 ## Deprecated `GlobalSettings`
 
@@ -160,7 +163,7 @@ To revert back to the earlier behavior (if you have "object MyController" in you
 routesGenerator := StaticRoutesGenerator
 ```
 
-If you're using `Build.scala` instead of `build.sbt` you will need to import the `routesGenerator` settings key: 
+If you're using `Build.scala` instead of `build.sbt` you will need to import the `routesGenerator` settings key:
 
 ````scala
 import play.sbt.routes.RoutesCompiler.autoImport._
@@ -203,7 +206,9 @@ You should refer to the list of dependency injected components in the [[Play 2.4
 For example, the following code injects an environment and configuration into a Controller in Scala:
 
 ```scala
-class HomeController @Inject() (environment: play.api.Environment, configuration: play.api.Configuration) extends Controller {
+class HomeController @Inject() (environment: play.api.Environment,
+    configuration: play.api.Configuration)
+  extends Controller {
 
   def index = Action {
     Ok(views.html.index("Your new application is ready."))
@@ -225,7 +230,8 @@ class HomeController @Inject() (environment: play.api.Environment, configuration
 Generally the components you use should not need to depend on the entire application, but sometimes you have to deal with legacy components that require one. You can handle this by injecting the application into one of your components:
 
 ```scala
-class FooController @Inject() (appProvider: Provider[Application]) extends Controller {
+class FooController @Inject() (appProvider: Provider[Application])
+  extends Controller {
   implicit lazy val app = appProvider.get()
   def bar = Action {
     Ok(Foo.bar(app))
@@ -333,14 +339,14 @@ Modify any `play.server.netty.option` keys to use the new keys defined in [Chann
 
 Java (`play.mvc.StatusHeader`) and Scala (`play.api.mvc.Results.Status`) APIs had the following behavior before:
 
-| API   | Method                                    | Default      |
-|:------|:------------------------------------------|:-------------|
-| Scala | `play.api.mvc.Results.StatussendResource` | `inline`     |
-| Scala | `play.api.mvc.Results.StatussendPath`     | `attachment` |
-| Scala | `play.api.mvc.Results.StatussendFile`     | `attachment` |
-| Java  | `play.mvc.StatusHeader.sendInputStream`   | `none`       |
-| Java  | `play.mvc.StatusHeader.sendResource`      | `inline`     |
-| Java  | `play.mvc.StatusHeader.sendPath`          | `attachment` |
-| Java  | `play.mvc.StatusHeader.sendFile`          | `inline`     |
+| API   | Method                                     | Default      |
+|:------|:-------------------------------------------|:-------------|
+| Scala | `play.api.mvc.Results.Status.sendResource` | `inline`     |
+| Scala | `play.api.mvc.Results.Status.sendPath`     | `attachment` |
+| Scala | `play.api.mvc.Results.Status.sendFile`     | `attachment` |
+| Java  | `play.mvc.StatusHeader.sendInputStream`    | `none`       |
+| Java  | `play.mvc.StatusHeader.sendResource`       | `inline`     |
+| Java  | `play.mvc.StatusHeader.sendPath`           | `attachment` |
+| Java  | `play.mvc.StatusHeader.sendFile`           | `inline`     |
 
 In other words, they were mixing `inline` and `attachment` modes when delivering files. Now, when delivering files, paths and resources uses `inline` as the default behavior. Of course, you can alternate between these two modes using the parameters present in these methods.

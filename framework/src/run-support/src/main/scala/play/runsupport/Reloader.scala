@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.runsupport
 
@@ -64,7 +64,8 @@ object Reloader {
     }
   }
 
-  def filterArgs(args: Seq[String],
+  def filterArgs(
+    args: Seq[String],
     defaultHttpPort: Int,
     defaultHttpAddress: String,
     devSettings: Seq[(String, String)]): (Seq[(String, String)], Option[Int], Option[Int], String) = {

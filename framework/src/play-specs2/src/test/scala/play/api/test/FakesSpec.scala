@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.test
 
@@ -8,38 +8,18 @@ import java.util.concurrent.TimeUnit
 import akka.stream.Materializer
 import akka.util.ByteString
 import play.api.inject.guice.GuiceApplicationBuilder
-import play.api.mvc._
-
-import play.api.test.Helpers._
-import play.api.mvc.Results._
 import play.api.libs.json.Json
-import org.specs2.specification.Scope
+import play.api.mvc.Results._
+import play.api.mvc._
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-object FakesSpec extends PlaySpecification {
+class FakesSpec extends PlaySpecification {
 
   sequential
 
-  "FakeApplication" should {
-
-    "allow adding routes inline" in {
-      running(_.routes {
-        case ("GET", "/inline") => Action {
-          Results.Ok("inline route")
-        }
-      }) { app =>
-        route(app, FakeRequest("GET", "/inline")) must beSome.which { result =>
-          status(result) must equalTo(OK)
-          contentAsString(result) must equalTo("inline route")
-        }
-        route(app, FakeRequest("GET", "/foo")) must beSome.which { result =>
-          status(result) must equalTo(NOT_FOUND)
-        }
-      }
-    }
-  }
+  private val Action = ActionBuilder.ignoringBody
 
   "FakeRequest" should {
     def app = GuiceApplicationBuilder().routes {
@@ -58,7 +38,7 @@ object FakesSpec extends PlaySpecification {
       val bytes = ByteString(xml.toString, "utf-16le")
       val req = FakeRequest(PUT, "/process")
         .withRawBody(bytes)
-      route(req) aka "response" must beSome.which { resp =>
+      route(app, req) aka "response" must beSome.which { resp =>
         contentAsString(resp) aka "content" must_== "application/octet-stream"
       }
     }
@@ -76,7 +56,7 @@ object FakesSpec extends PlaySpecification {
         .withHeaders(
           CONTENT_TYPE -> "text/xml;charset=utf-16le"
         )
-      route(req) aka "response" must beSome.which { resp =>
+      route(app, req) aka "response" must beSome.which { resp =>
         contentAsString(resp) aka "content" must_== "text/xml;charset=utf-16le"
       }
     }
@@ -98,7 +78,7 @@ object FakesSpec extends PlaySpecification {
 
   def contentTypeForFakeRequest[T](request: FakeRequest[AnyContentAsJson])(implicit mat: Materializer): String = {
     var testContentType: Option[String] = None
-    val action = Action { request => testContentType = request.headers.get(CONTENT_TYPE); Ok }
+    val action = Action { request: Request[_] => testContentType = request.headers.get(CONTENT_TYPE); Ok }
     val headers = new WrappedRequest(request)
     val execution = (new TestActionCaller).call(action, headers, request.body)
     Await.result(execution, Duration(3, TimeUnit.SECONDS))

@@ -1,29 +1,33 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.test
 
-import akka.actor.Cancellable
-import akka.stream.{ ClosedShape, Graph, Materializer }
-import akka.stream.scaladsl.Source
-import play.api.inject.guice.GuiceApplicationBuilder
-import play.mvc.Http.RequestBody
+import java.nio.file.Path
 
-import scala.language.reflectiveCalls
-import play.api._
-import play.api.mvc._
-import play.api.http._
-import play.api.libs.json.{ JsValue, Json }
-import play.twirl.api.Content
+import akka.actor.Cancellable
+import akka.stream.scaladsl.Source
+import akka.stream._
+import akka.util.{ ByteString, Timeout }
 import org.openqa.selenium._
 import org.openqa.selenium.firefox._
 import org.openqa.selenium.htmlunit._
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
-import scala.concurrent.Future
-import akka.util.{ ByteString, Timeout }
+import play.api._
+import play.api.http._
+import play.api.i18n.{ DefaultLangs, DefaultMessagesApi, Langs, MessagesApi }
+import play.api.inject.guice.GuiceApplicationBuilder
+import play.api.libs.Files
+import play.api.libs.json.{ JsValue, Json }
 import play.api.libs.streams.Accumulator
+import play.api.mvc._
+import play.mvc.Http.RequestBody
+import play.twirl.api.Content
+
+import scala.concurrent.{ Await, ExecutionContext, ExecutionContextExecutor, Future }
+import scala.concurrent.duration._
+import scala.language.reflectiveCalls
+import scala.reflect.ClassTag
+import scala.util.Try
 
 /**
  * Helper functions to run tests.
@@ -34,8 +38,8 @@ trait PlayRunners extends HttpVerbs {
   val FIREFOX = classOf[FirefoxDriver]
 
   /**
-    * The base builder used in the running method.
-    */
+   * The base builder used in the running method.
+   */
   lazy val baseApplicationBuilder = new GuiceApplicationBuilder()
 
   def running[T]()(block: Application => T): T = {
@@ -109,7 +113,7 @@ trait PlayRunners extends HttpVerbs {
   lazy val testServerPort = Option(System.getProperty("testserver.port")).map(_.toInt).getOrElse(19001)
 
   /**
-   * Constructs a in-memory (h2) database configuration to add to a FakeApplication.
+   * Constructs a in-memory (h2) database configuration to add to an Application.
    */
   def inMemoryDatabase(name: String = "default", options: Map[String, String] = Map.empty[String, String]): Map[String, String] = {
     val optionsForDbUrl = options.map { case (k, v) => k + "=" + v }.mkString(";", ";", "")
@@ -130,8 +134,11 @@ object PlayRunners {
 }
 
 trait Writeables {
-  implicit def writeableOf_AnyContentAsJson(implicit codec: Codec): Writeable[AnyContentAsJson] =
-    Writeable.writeableOf_JsValue.map(c => c.json)
+  def writeableOf_AnyContentAsJson(codec: Codec, contentType: Option[String] = None): Writeable[AnyContentAsJson] =
+    Writeable.writeableOf_JsValue(codec, contentType).map(_.json)
+
+  implicit def writeableOf_AnyContentAsJson: Writeable[AnyContentAsJson] =
+    Writeable.writeableOf_JsValue.map(_.json)
 
   implicit def writeableOf_AnyContentAsXml(implicit codec: Codec): Writeable[AnyContentAsXml] =
     Writeable.writeableOf_NodeSeq.map(c => c.xml)
@@ -200,7 +207,7 @@ trait EssentialActionCaller {
   /**
    * Execute an [[play.api.mvc.EssentialAction]].
    *
-   * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
+   * The body is serialised using the implicit writable, so that the action body parser can deserialize it.
    */
   def call[T](action: EssentialAction, req: Request[T])(implicit w: Writeable[T], mat: Materializer): Future[Result] =
     call(action, req, req.body)
@@ -208,17 +215,17 @@ trait EssentialActionCaller {
   /**
    * Execute an [[play.api.mvc.EssentialAction]].
    *
-   * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
+   * The body is serialised using the implicit writable, so that the action body parser can deserialize it.
    */
   def call[T](action: EssentialAction, rh: RequestHeader, body: T)(implicit w: Writeable[T], mat: Materializer): Future[Result] = {
     import play.api.http.HeaderNames._
-    val newContentType = rh.headers.get(CONTENT_TYPE).fold(w.contentType)(_ => None)
-    val rhWithCt = newContentType.map { ct =>
-      rh.copy(headers = rh.headers.replace(CONTENT_TYPE -> ct))
-    }.getOrElse(rh)
+    val bytes = w.transform(body)
 
-    val requestBody = Source.single(w.transform(body))
-    action(rhWithCt).run(requestBody)
+    val contentType = rh.headers.get(CONTENT_TYPE).orElse(w.contentType).map(CONTENT_TYPE -> _)
+    val contentLength = rh.headers.get(CONTENT_LENGTH).orElse(Some(bytes.length.toString)).map(CONTENT_LENGTH -> _)
+    val newHeaders = rh.headers.replace(contentLength.toSeq ++ contentType.toSeq: _*)
+
+    action(rh.withHeaders(newHeaders)).run(Source.single(bytes))
   }
 }
 
@@ -233,7 +240,7 @@ trait RouteInvokers extends EssentialActionCaller {
   /**
    * Use the HttpRequestHandler to determine the Action to call for this request and execute it.
    *
-   * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
+   * The body is serialised using the implicit writable, so that the action body parser can deserialize it.
    */
   def route[T](app: Application, rh: RequestHeader, body: T)(implicit w: Writeable[T]): Option[Future[Result]] = {
     val (taggedRh, handler) = app.requestHandler.handlerForRequest(rh)
@@ -248,29 +255,10 @@ trait RouteInvokers extends EssentialActionCaller {
   /**
    * Use the HttpRequestHandler to determine the Action to call for this request and execute it.
    *
-   * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
-   *
-   * @deprecated Use the version that takes an application, since 2.5.0
-   */
-  @deprecated("Use the version that takes an application", "2.5.0")
-  def route[T](rh: RequestHeader, body: T)(implicit w: Writeable[T]): Option[Future[Result]] = route(Play.current, rh, body)
-
-  /**
-   * Use the HttpRequestHandler to determine the Action to call for this request and execute it.
-   *
-   * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
+   * The body is serialised using the implicit writable, so that the action body parser can deserialize it.
    */
   def route[T](app: Application, req: Request[T])(implicit w: Writeable[T]): Option[Future[Result]] = route(app, req, req.body)
 
-  /**
-   * Use the HttpRequestHandler to determine the Action to call for this request and execute it.
-   *
-   * The body is serialised using the implicit writable, so that the action body parser can deserialise it.
-   *
-   * @deprecated Use the version that takes an application, since 2.5.0
-   */
-  @deprecated("Use the version that takes an application", "2.5.0")
-  def route[T](req: Request[T])(implicit w: Writeable[T]): Option[Future[Result]] = route(Play.current, req)
 }
 
 trait ResultExtractors {
@@ -372,34 +360,40 @@ trait ResultExtractors {
   def status(of: Accumulator[ByteString, Result])(implicit timeout: Timeout, mat: Materializer): Int = status(of.run())
 
   /**
-   * Extracts the Cookies of this Result value.
+   * Gets the Cookies associated with this Result value. Note that this only extracts the "new" cookies added to
+   * this result (e.g. through withCookies), not including the Session or Flash. The final set of cookies may be
+   * different because the Play server automatically adds those cookies and merges the headers.
    */
-  def cookies(of: Future[Result])(implicit timeout: Timeout): Cookies = Cookies.fromSetCookieHeader(header(SET_COOKIE, of))
+  def cookies(of: Future[Result])(implicit timeout: Timeout): Cookies = {
+    Await.result(of.map(result => Cookies(result.newCookies))(play.core.Execution.trampoline), timeout.duration)
+  }
 
   /**
-   * Extracts the Cookies of this Result value.
+   * Extracts the Cookies set by this Result value.
    */
   def cookies(of: Accumulator[ByteString, Result])(implicit timeout: Timeout, mat: Materializer): Cookies = cookies(of.run())
 
   /**
-   * Extracts the Flash values of this Result value.
+   * Extracts the Flash values set by this Result value.
    */
-  def flash(of: Future[Result])(implicit timeout: Timeout): Flash = Flash.decodeFromCookie(cookies(of).get(Flash.COOKIE_NAME))
+  def flash(of: Future[Result])(implicit timeout: Timeout): Flash = {
+    Await.result(of.map(_.newFlash.getOrElse(Flash.emptyCookie))(play.core.Execution.trampoline), timeout.duration)
+  }
 
   /**
-   * Extracts the Flash values of this Result value.
+   * Extracts the Flash values set by this Result value.
    */
   def flash(of: Accumulator[ByteString, Result])(implicit timeout: Timeout, mat: Materializer): Flash = flash(of.run())
 
   /**
-   * Extracts the Session of this Result value.
-   * Extracts the Session from this Result value.
+   * Extracts the Session values set by this Result value.
    */
-  def session(of: Future[Result])(implicit timeout: Timeout): Session = Session.decodeFromCookie(cookies(of).get(Session.COOKIE_NAME))
+  def session(of: Future[Result])(implicit timeout: Timeout): Session = {
+    Await.result(of.map(_.newSession.getOrElse(Session.emptyCookie))(play.core.Execution.trampoline), timeout.duration)
+  }
 
   /**
-   * Extracts the Session of this Result value.
-   * Extracts the Session from this Result value.
+   * Extracts the Session set by this Result value.
    */
   def session(of: Accumulator[ByteString, Result])(implicit timeout: Timeout, mat: Materializer): Session = session(of.run())
 
@@ -444,6 +438,79 @@ trait ResultExtractors {
 
 }
 
+trait StubPlayBodyParsersFactory {
+
+  /**
+   * Stub method for unit testing, using NoTemporaryFileCreator.
+   *
+   * @param mat the input materializer.
+   * @return a minimal PlayBodyParsers for unit testing.
+   */
+  def stubPlayBodyParsers(mat: Materializer): PlayBodyParsers = {
+    val errorHandler = new DefaultHttpErrorHandler(HttpErrorConfig(showDevErrors = false, None), None, None)
+    PlayBodyParsers(ParserConfiguration(), errorHandler, mat, NoTemporaryFileCreator)
+  }
+
+}
+
+trait StubBodyParserFactory {
+  /**
+   * Stub method that returns the content immediately.  Useful for unit testing.
+   *
+   * {{{
+   * val stubParser = bodyParser(AnyContent("hello"))
+   * }}}
+   *
+   * @param content the content to return, AnyContentAsEmpty by default
+   * @return a BodyParser for type T that returns Accumulator.done(Right(content))
+   */
+  def stubBodyParser[T](content: T = AnyContentAsEmpty): BodyParser[T] = {
+    BodyParser(_ => Accumulator.done(Right(content)))
+  }
+}
+
+trait StubControllerComponentsFactory extends StubPlayBodyParsersFactory with StubBodyParserFactory {
+
+  /**
+   * Create a minimal controller components, useful for unit testing.
+   *
+   * In most cases, you'll want the standard defaults:
+   *
+   * {{{
+   *   val controller = new MyController(stubControllerComponents())
+   * }}}
+   *
+   * A custom body parser can be used with bodyParser() to provide a request body to the controller:
+   *
+   * {{{
+   * val cc = stubControllerComponents(bodyParser(AnyContent("request body text")))
+   * }}}
+   *
+   * @param bodyParser the body parser used to parse any content, stubBodyParser(AnyContentAsEmpty) by default.
+   * @param playBodyParsers the playbodyparsers, defaults to stubPlayBodyParsers(NoMaterializer)
+   * @param messagesApi: the messages api, new DefaultMessagesApi() by default.
+   * @param langs the langs instance for messaging, new DefaultLangs() by default.
+   * @param fileMimeTypes the mime type associated with file extensions, new DefaultFileMimeTypes(FileMimeTypesConfiguration() by default.
+   * @param executionContent an execution context, defaults to ExecutionContext.global
+   * @return a fully configured ControllerComponents instance.
+   */
+  def stubControllerComponents(
+    bodyParser: BodyParser[AnyContent] = stubBodyParser(AnyContentAsEmpty),
+    playBodyParsers: PlayBodyParsers = stubPlayBodyParsers(NoMaterializer),
+    messagesApi: MessagesApi = new DefaultMessagesApi(),
+    langs: Langs = new DefaultLangs(),
+    fileMimeTypes: FileMimeTypes = new DefaultFileMimeTypes(FileMimeTypesConfiguration()),
+    executionContent: ExecutionContext = ExecutionContext.global): ControllerComponents = {
+    DefaultControllerComponents(
+      DefaultActionBuilder(bodyParser)(executionContent),
+      playBodyParsers,
+      messagesApi,
+      langs,
+      fileMimeTypes,
+      executionContent)
+  }
+}
+
 object Helpers extends PlayRunners
   with HeaderNames
   with Status
@@ -455,19 +522,60 @@ object Helpers extends PlayRunners
   with EssentialActionCaller
   with RouteInvokers
   with FutureAwaits
+  with StubControllerComponentsFactory
+
+/**
+ * A trait declared on a class that contains an `def app: Application`, and can provide
+ * instances of a class.  Useful in integration tests.
+ */
+trait Injecting {
+  self: HasApp =>
+
+  /**
+   * Given an application, provides an instance from the application.
+   *
+   * @tparam T the type to return, using `app.injector.instanceOf`
+   * @return an instance of type T.
+   */
+  def inject[T: ClassTag]: T = {
+    self.app.injector.instanceOf
+  }
+}
+
+/**
+ * A temporary file creator with no implementation.
+ */
+object NoTemporaryFileCreator extends Files.TemporaryFileCreator {
+  override def create(prefix: String, suffix: String): Files.TemporaryFile = {
+    throw new UnsupportedOperationException("Cannot create temporary file")
+  }
+  override def create(path: Path): Files.TemporaryFile = {
+    throw new UnsupportedOperationException(s"Cannot create temporary file at $path")
+  }
+  override def delete(file: Files.TemporaryFile): Try[Boolean] = {
+    throw new UnsupportedOperationException(s"Cannot delete temporary file at $file")
+  }
+}
 
 /**
  * In 99% of cases, when running tests against the result body, you don't actually need a materializer since it's a
  * strict body. So, rather than always requiring an implicit materializer, we use one if provided, otherwise we have
  * a default one that simply throws an exception if used.
  */
-private[play] object NoMaterializer extends Materializer {
-  def withNamePrefix(name: String) = throw new UnsupportedOperationException("NoMaterializer cannot be named")
-  implicit def executionContext = throw new UnsupportedOperationException("NoMaterializer does not have an execution context")
-  def materialize[Mat](runnable: Graph[ClosedShape, Mat]) =
-    throw new UnsupportedOperationException("No materializer was provided, probably when attempting to extract a response body, but that body is a streamed body and so requires a materializer to extract it.")
-  override def scheduleOnce(delay: FiniteDuration, task: Runnable): Cancellable =
-    throw new UnsupportedOperationException("NoMaterializer can't schedule tasks")
-  override def schedulePeriodically(initialDelay: FiniteDuration, interval: FiniteDuration, task: Runnable): Cancellable =
-    throw new UnsupportedOperationException("NoMaterializer can't schedule tasks")
+object NoMaterializer extends Materializer {
+  override def withNamePrefix(name: String): Materializer =
+    throw new UnsupportedOperationException("NoMaterializer cannot be named")
+  override def materialize[Mat](runnable: Graph[ClosedShape, Mat]): Mat =
+    throw new UnsupportedOperationException("NoMaterializer cannot materialize")
+  override def materialize[Mat](runnable: Graph[ClosedShape, Mat], initialAttributes: Attributes): Mat =
+    throw new UnsupportedOperationException("NoMaterializer cannot materialize")
+
+  override def executionContext: ExecutionContextExecutor =
+    throw new UnsupportedOperationException("NoMaterializer does not provide an ExecutionContext")
+
+  def scheduleOnce(delay: FiniteDuration, task: Runnable): Cancellable =
+    throw new UnsupportedOperationException("NoMaterializer cannot schedule a single event")
+
+  def schedulePeriodically(initialDelay: FiniteDuration, interval: FiniteDuration, task: Runnable): Cancellable =
+    throw new UnsupportedOperationException("NoMaterializer cannot schedule a repeated event")
 }

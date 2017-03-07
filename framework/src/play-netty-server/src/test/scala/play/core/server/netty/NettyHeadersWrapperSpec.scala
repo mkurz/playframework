@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.server.netty
 
@@ -7,7 +7,7 @@ import io.netty.handler.codec.http.DefaultHttpHeaders
 import org.specs2.mutable._
 import play.api.mvc._
 
-object NettyHeadersWrapperSpec extends Specification {
+class NettyHeadersWrapperSpec extends Specification {
 
   val headers: Headers = {
     val nettyHeaders = new DefaultHttpHeaders()

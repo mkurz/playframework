@@ -1,16 +1,16 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.cache
 
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject._
 
-import org.joda.time.DateTime
 import play.api.cache.ehcache.EhCacheApi
-import play.api.{ Application, http }
-import play.api.mvc.{ Action, Results }
+import play.api.mvc._
 import play.api.test._
+import play.api.{ Application, http }
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -22,6 +22,9 @@ class CachedSpec extends PlaySpecification {
   def cached(implicit app: Application) = {
     new Cached(app.injector.instanceOf[AsyncCacheApi])(app.materializer)
   }
+
+  // Tests here don't use the body
+  val Action = ActionBuilder.ignoringBody
 
   "the cached action" should {
     "cache values using injected CachedApi" in new WithApplication() {
@@ -136,23 +139,35 @@ class CachedSpec extends PlaySpecification {
       invoked.get() must_== 1
     }
 
+    "use etags weak comparison" in new WithApplication() {
+      val invoked = new AtomicInteger()
+      val action = cached(app)(_ => "foo")(Action(Results.Ok("" + invoked.incrementAndGet())))
+      val result1 = action(FakeRequest()).run()
+      status(result1) must_== 200
+      invoked.get() must_== 1
+      val etag = header(ETAG, result1).map("W/" + _)
+      etag must beSome(matching("""([wW]/)?"([^"]|\\")*"""")) //"""
+      val result2 = action(FakeRequest().withHeaders(IF_NONE_MATCH -> etag.get)).run()
+      status(result2) must_== NOT_MODIFIED
+      invoked.get() must_== 1
+    }
+
     "work with etag cache misses" in new WithApplication() {
       val action = cached(app)(_.uri)(Action(Results.Ok))
       val resultA = action(FakeRequest("GET", "/a")).run()
       status(resultA) must_== 200
-      status(action(FakeRequest("GET", "/a").withHeaders(IF_NONE_MATCH -> "foo")).run) must_== 200
+      status(action(FakeRequest("GET", "/a").withHeaders(IF_NONE_MATCH -> "\"foo\"")).run) must_== 200
       status(action(FakeRequest("GET", "/b").withHeaders(IF_NONE_MATCH -> header(ETAG, resultA).get)).run) must_== 200
       status(action(FakeRequest("GET", "/c").withHeaders(IF_NONE_MATCH -> "*")).run) must_== 200
+      status(action(FakeRequest("GET", "/d").withHeaders(IF_NONE_MATCH -> "illegal")).run) must_== 200
     }
   }
 
-  val dummyAction = Action { request =>
-    Results.Ok {
-      Random.nextInt().toString
-    }
+  val dummyAction = Action { request: Request[_] =>
+    Results.Ok(Random.nextInt().toString)
   }
 
-  val notFoundAction = Action { request =>
+  val notFoundAction = Action { request: Request[_] =>
     Results.NotFound(Random.nextInt().toString)
   }
 
@@ -207,8 +222,8 @@ class CachedSpec extends PlaySpecification {
       val res1 = header(EXPIRES, actionNotFound(FakeRequest("GET", "/b")).run())
 
       def toDuration(header: String) = {
-        val now = DateTime.now().getMillis
-        val target = http.dateFormat.parseDateTime(header).getMillis
+        val now = Instant.now().toEpochMilli
+        val target = Instant.from(http.dateFormat.parse(header)).toEpochMilli
         Duration(target - now, MILLISECONDS)
       }
 
@@ -304,14 +319,16 @@ class SomeComponent @Inject() (@NamedCache("custom") cache: AsyncCacheApi) {
   def set(key: String, value: String) = cache.sync.set(key, value)
 }
 
-class CachedController @Inject() (cached: Cached) {
+class CachedController @Inject() (cached: Cached, c: ControllerComponents) extends AbstractController(c) {
   val invoked = new AtomicInteger()
   val action = cached(_ => "foo")(Action(Results.Ok("" + invoked.incrementAndGet())))
 }
 
 class NamedCachedController @Inject() (
     @NamedCache("custom") val cache: AsyncCacheApi,
-    @NamedCache("custom") val cached: Cached) {
+    @NamedCache("custom") val cached: Cached,
+    components: ControllerComponents
+) extends AbstractController(components) {
   val invoked = new AtomicInteger()
   val action = cached(_ => "foo")(Action(Results.Ok("" + invoked.incrementAndGet())))
   def isCached(key: String): Boolean = cache.sync.get[String](key).isDefined

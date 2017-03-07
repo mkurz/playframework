@@ -1,11 +1,10 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.server
 
 import java.io.IOException
 import java.net.InetSocketAddress
-import java.util.concurrent.TimeUnit
 
 import akka.Done
 import akka.actor.ActorSystem
@@ -25,6 +24,7 @@ import io.netty.handler.logging.{ LogLevel, LoggingHandler }
 import io.netty.handler.ssl.SslHandler
 import io.netty.handler.timeout.IdleStateHandler
 import play.api._
+import play.api.inject.DefaultApplicationLifecycle
 import play.api.mvc.{ Handler, RequestHeader }
 import play.api.routing.Router
 import play.core._
@@ -144,6 +144,11 @@ class NettyServer(
   }
 
   /**
+   * Create a new PlayRequestHandler.
+   */
+  protected[this] def newRequestHandler(): ChannelInboundHandler = new PlayRequestHandler(this)
+
+  /**
    * Create a sink for the incoming connection channels.
    */
   private def channelSink(port: Int, secure: Boolean): Sink[Channel, Future[Done]] = {
@@ -172,7 +177,7 @@ class NettyServer(
       // Netty HTTP decoders/encoders/etc
       pipeline.addLast("decoder", new HttpRequestDecoder(maxInitialLineLength, maxHeaderSize, maxChunkSize))
       pipeline.addLast("encoder", new HttpResponseEncoder())
-      pipeline.addLast("decompressor", new PlayHttpContentDecompressor())
+      pipeline.addLast("decompressor", new HttpContentDecompressor())
       if (logWire) {
         pipeline.addLast("logging", new LoggingHandler(LogLevel.DEBUG))
       }
@@ -190,7 +195,7 @@ class NettyServer(
           pipeline.addLast("idle-handler", new IdleStateHandler(0, 0, timeout, timeUnit))
       }
 
-      val requestHandler = new PlayRequestHandler(this)
+      val requestHandler = newRequestHandler()
 
       // Use the streams handler to close off the connection.
       pipeline.addLast("http-handler", new HttpStreamsServerHandler(Seq[ChannelHandler](requestHandler).asJava))
@@ -342,6 +347,7 @@ trait NettyServerComponents {
   lazy val sourceMapper: Option[SourceMapper] = None
   lazy val webCommands: WebCommands = new DefaultWebCommands
   lazy val configuration: Configuration = Configuration(ConfigFactory.load())
+  lazy val applicationLifecycle: DefaultApplicationLifecycle = new DefaultApplicationLifecycle
 
   def application: Application
 

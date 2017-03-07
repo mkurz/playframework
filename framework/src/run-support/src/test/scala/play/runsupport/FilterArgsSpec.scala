@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.runsupport
 
 import org.specs2.mutable._
 import org.specs2.execute.Result
 
-object FilterArgsSpec extends Specification {
+class FilterArgsSpec extends Specification {
 
   val defaultHttpPort = 9000
   val defaultHttpAddress = "0.0.0.0"

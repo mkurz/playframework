@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
@@ -7,6 +7,8 @@ import java.security.cert.X509Certificate
 
 import play.api.http.{ HeaderNames, MediaRange, MediaType }
 import play.api.i18n.Lang
+import play.api.libs.typedmap.{ TypedEntry, TypedMap }
+import play.api.mvc.request._
 
 import scala.annotation.implicitNotFound
 
@@ -15,29 +17,27 @@ import scala.annotation.implicitNotFound
  */
 @implicitNotFound("Cannot find any HTTP Request Header here")
 trait RequestHeader {
+  top =>
 
   /**
-   * The request ID.
+   * The remote connection that made the request.
    */
-  def id: Long
+  def connection: RemoteConnection
+
+  def withConnection(newConnection: RemoteConnection): RequestHeader =
+    new RequestHeaderImpl(newConnection, method, target, version, headers, attrs)
 
   /**
-   * The request Tags.
+   * The request id. The request id is stored as an attribute indexed by [[play.api.mvc.request.RequestAttrKey.Id]].
    */
-  def tags: Map[String, String]
+  final def id: Long = attrs(RequestAttrKey.Id)
 
   /**
-   * The complete request URI, containing both path and query string.
-   * The URI is what was on the status line after the request method.
-   * E.g. in "GET /foo/bar?q=s HTTP/1.1" the URI should be /foo/bar?q=s.
-   * It could be absolute, some clients send absolute URLs, especially proxies.
+   * The request Tags. The request's tags are stored in an optional attribute indexed by
+   * [[play.api.mvc.request.RequestAttrKey.Tags]]. If the attribute is not present then the tags are assumed to be empty.
    */
-  def uri: String
-
-  /**
-   * The URI path.
-   */
-  def path: String
+  @deprecated("Use typed attributes instead, see `attrs`", "2.6.0")
+  final def tags: Map[String, String] = attrs.get(RequestAttrKey.Tags).getOrElse(Map.empty)
 
   /**
    * The HTTP method.
@@ -45,14 +45,54 @@ trait RequestHeader {
   def method: String
 
   /**
+   * Return a new copy of the request with its method changed.
+   */
+  def withMethod(newMethod: String): RequestHeader =
+    new RequestHeaderImpl(connection, newMethod, target, version, headers, attrs)
+
+  /**
+   * The target of the HTTP request, i.e. the URI or path that was
+   * given on the first line of the request.
+   */
+  def target: RequestTarget
+
+  /**
+   * Return a new copy of the request with its target changed.
+   */
+  def withTarget(newTarget: RequestTarget): RequestHeader =
+    new RequestHeaderImpl(connection, method, newTarget, version, headers, attrs)
+
+  /**
+   * The complete request URI, containing both path and query string.
+   * The URI is what was on the status line after the request method.
+   * E.g. in "GET /foo/bar?q=s HTTP/1.1" the URI should be /foo/bar?q=s.
+   * It could be absolute, some clients send absolute URLs, especially proxies,
+   * e.g. http://www.example.org/foo/bar?q=s.
+   *
+   * This method delegates to `target.uriString`.
+   */
+  final def uri: String = target.uriString
+
+  /**
+   * The URI path. This method delegates to `target.path`.
+   */
+  final def path: String = target.path
+
+  /**
    * The HTTP version.
    */
   def version: String
 
   /**
-   * The parsed query string.
+   * Return a new copy of the request with its HTTP version changed.
    */
-  def queryString: Map[String, Seq[String]]
+  def withVersion(newVersion: String): RequestHeader =
+    new RequestHeaderImpl(connection, method, target, newVersion, headers, attrs)
+
+  /**
+   * The parsed query string. This method delegates to `target.queryMap`.
+   */
+  final def queryString: Map[String, Seq[String]] = target.queryMap
 
   /**
    * The HTTP headers.
@@ -60,31 +100,58 @@ trait RequestHeader {
   def headers: Headers
 
   /**
+   * The remote connection that made the request.
+   */
+  def withHeaders(newHeaders: Headers): RequestHeader =
+    new RequestHeaderImpl(connection, method, target, version, newHeaders, attrs)
+
+  /**
    * The client IP address.
    *
    * retrieves the last untrusted proxy
    * from the Forwarded-Headers or the X-Forwarded-*-Headers.
    *
+   * This method delegates to `connection.remoteAddressString`.
+   */
+  final def remoteAddress: String = connection.remoteAddressString
+
+  /**
+   * Is the client using SSL? This method delegates to `connection.secure`.
+   */
+  final def secure: Boolean = connection.secure
+
+  /**
+   * The X509 certificate chain presented by a client during SSL requests.  This method is
+   * equivalent to `connection.clientCertificateChain`.
+   */
+  final def clientCertificateChain: Option[Seq[X509Certificate]] = connection.clientCertificateChain
+
+  /**
+   * A map of typed attributes associated with the request.
+   */
+  def attrs: TypedMap
+
+  /**
+   * Create a new version of this object with the given attributes attached to it.
+   * This replaces any existing attributes.
    *
+   * @param newAttrs The new attributes to add.
+   * @return The new version of this object with the attributes attached.
    */
-  def remoteAddress: String
-
-  /**
-   * Is the client using SSL?
-   */
-  def secure: Boolean
-
-  /**
-   * The X509 certificate chain presented by a client during SSL requests.
-   */
-  def clientCertificateChain: Option[Seq[X509Certificate]]
+  def withAttrs(newAttrs: TypedMap): RequestHeader =
+    new RequestHeaderImpl(connection, method, target, version, headers, newAttrs)
 
   // -- Computed
 
   /**
-   * Helper method to access a queryString parameter.
+   * Helper method to access a queryString parameter. This method delegates to `connection.getQueryParameter(key)`.
+   *
+   * @return The query parameter's value if the parameter is present
+   *         and there is only one value. If the parameter is absent
+   *         or there is more than one value for that parameter then
+   *         `None` is returned.
    */
-  def getQueryString(key: String): Option[String] = queryString.get(key).flatMap(_.headOption)
+  def getQueryString(key: String): Option[String] = target.getQueryParameter(key)
 
   /**
    * True if this request has a body, so we know if we should trigger body parsing. The base implementation simply
@@ -97,7 +164,9 @@ trait RequestHeader {
   }
 
   /**
-   * The HTTP host (domain, optionally port)
+   * The HTTP host (domain, optionally port). This value is derived from the request target, if a hostname is present.
+   * If the target doesn't have a host then the `Host` header is used, if present. If that's not present then an
+   * empty string is returned.
    */
   lazy val host: String = {
     val AbsoluteUri = """(?is)^(https?)://([^/]+)(/.*|$)""".r
@@ -108,7 +177,7 @@ trait RequestHeader {
   }
 
   /**
-   * The HTTP domain
+   * The HTTP domain. The domain part of the request's [[host]].
    */
   lazy val domain: String = host.split(':').head
 
@@ -137,24 +206,28 @@ trait RequestHeader {
   }
 
   /**
-   * The HTTP cookies.
+   * The HTTP cookies. The request's cookies are stored in an attribute indexed by
+   * [[play.api.mvc.request.RequestAttrKey.Cookies]]. The attribute uses a Cell to store the cookies,
+   * to allow them to be evaluated on-demand.
    */
-  lazy val cookies: Cookies = Cookies.fromCookieHeader(headers.get(play.api.http.HeaderNames.COOKIE))
+  def cookies: Cookies = attrs(RequestAttrKey.Cookies).value
 
   /**
-   * Parses the `Session` cookie and returns the `Session` data.
+   * Parses the `Session` cookie and returns the `Session` data. The request's session cookie is stored in an attribute indexed by
+   * [[play.api.mvc.request.RequestAttrKey.Session]]. The attribute uses a Cell to store the session cookie, to allow it to be evaluated on-demand.
    */
-  lazy val session: Session = Session.decodeFromCookie(cookies.get(Session.COOKIE_NAME))
+  def session: Session = attrs(RequestAttrKey.Session).value
 
   /**
-   * Parses the `Flash` cookie and returns the `Flash` data.
+   * Parses the `Flash` cookie and returns the `Flash` data. The request's flash cookie is stored in an attribute indexed by
+   * [[play.api.mvc.request.RequestAttrKey.Flash]]. The attribute uses a [[play.api.mvc.request.Cell]] to store the session, to allow it to be evaluated on-demand.
    */
-  lazy val flash: Flash = Flash.decodeFromCookie(cookies.get(Flash.COOKIE_NAME))
+  def flash: Flash = attrs(RequestAttrKey.Flash).value
 
   /**
-   * Returns the raw query string.
+   * Returns the raw query string. This method delegates to `connection.rawQueryString`.
    */
-  lazy val rawQueryString: String = uri.split('?').drop(1).mkString("?")
+  def rawQueryString: String = target.queryString
 
   /**
    * The media type of this request.  Same as contentType, except returns a fully parsed media type with parameters.
@@ -185,35 +258,70 @@ trait RequestHeader {
   }
 
   /**
+   * Attach a body to this header.
+   *
+   * @param body The body to attach.
+   * @tparam A The type of the body.
+   * @return A new request with the body attached to the header.
+   */
+  def withBody[A](body: A): Request[A] =
+    new RequestImpl[A](connection, method, target, version, headers, attrs, body)
+
+  /**
    * Copy the request.
    */
+  @deprecated("Use the with* methods instead", "2.6.0")
   def copy(
-    id: Long = this.id,
-    tags: Map[String, String] = this.tags,
-    uri: String = this.uri,
-    path: String = this.path,
+    id: java.lang.Long = null,
+    tags: Map[String, String] = null,
+    uri: String = null,
+    path: String = null,
     method: String = this.method,
     version: String = this.version,
-    queryString: Map[String, Seq[String]] = this.queryString,
-    headers: Headers = this.headers,
-    remoteAddress: => String = this.remoteAddress,
-    secure: => Boolean = this.secure,
-    clientCertificateChain: Option[Seq[X509Certificate]] = this.clientCertificateChain): RequestHeader = {
-    val (_id, _tags, _uri, _path, _method, _version, _queryString, _headers, _remoteAddress, _secure, _clientCertificateChain, _hasBody) = (id, tags, uri, path, method, version, queryString, headers, () => remoteAddress, () => secure, clientCertificateChain, hasBody)
-    new RequestHeader {
-      override val id = _id
-      override val tags = _tags
-      override val uri = _uri
-      override val path = _path
-      override val method = _method
-      override val version = _version
-      override val queryString = _queryString
-      override val headers = _headers
-      override lazy val remoteAddress = _remoteAddress()
-      override lazy val secure = _secure()
-      override val clientCertificateChain = _clientCertificateChain
-      override val hasBody = _hasBody || super.hasBody
+    queryString: Map[String, Seq[String]] = null,
+    headers: Headers = null,
+    remoteAddress: String = null,
+    secure: java.lang.Boolean = null,
+    clientCertificateChain: Option[Seq[X509Certificate]] = null): RequestHeader = {
+
+    var newHeader: RequestHeader = this
+
+    // We only need to modify the request when an argument is non-null.
+    if (id != null) {
+      newHeader = newHeader.withAttrs(newHeader.attrs.updated(RequestAttrKey.Id, (id: Long)))
     }
+    if (tags != null) {
+      newHeader = newHeader.withAttrs(newHeader.attrs.updated(RequestAttrKey.Tags, tags))
+    }
+    if (uri != null) {
+      newHeader = newHeader.withTarget(newHeader.target.withUriString(uri))
+    }
+    if (path != null) {
+      newHeader = newHeader.withTarget(newHeader.target.withPath(path))
+    }
+    if (method != null) {
+      newHeader = newHeader.withMethod(method)
+    }
+    if (queryString != null) {
+      newHeader = newHeader.withTarget(newHeader.target.withQueryString(queryString))
+    }
+    if (version != null) {
+      newHeader = newHeader.withVersion(version)
+    }
+    if (headers != null) {
+      newHeader = newHeader.withHeaders(headers)
+    }
+    if (remoteAddress != null) {
+      newHeader = newHeader.withConnection(RemoteConnection(remoteAddress, newHeader.secure, newHeader.clientCertificateChain))
+    }
+    if (secure != null) {
+      newHeader = newHeader.withConnection(RemoteConnection(newHeader.remoteAddress, secure, newHeader.clientCertificateChain))
+    }
+    if (clientCertificateChain != null) {
+      newHeader = newHeader.withConnection(RemoteConnection(newHeader.remoteAddress, newHeader.secure, clientCertificateChain))
+    }
+
+    newHeader
   }
 
   override def toString = {
@@ -243,16 +351,13 @@ object RequestHeader {
   }
 }
 
+/**
+ * A standard implementation of a RequestHeader.
+ */
 private[play] class RequestHeaderImpl(
-    override val id: Long,
-    override val tags: Map[String, String],
-    override val uri: String,
-    override val path: String,
-    override val method: String,
-    override val version: String,
-    override val queryString: Map[String, Seq[String]],
-    override val headers: Headers,
-    override val remoteAddress: String,
-    override val secure: Boolean,
-    override val clientCertificateChain: Option[Seq[X509Certificate]]) extends RequestHeader {
-}
+  override val connection: RemoteConnection,
+  override val method: String,
+  override val target: RequestTarget,
+  override val version: String,
+  override val headers: Headers,
+  override val attrs: TypedMap) extends RequestHeader

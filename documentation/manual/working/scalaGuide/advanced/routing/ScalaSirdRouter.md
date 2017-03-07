@@ -1,11 +1,11 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # String Interpolating Routing DSL
 
 Play provides a DSL for defining embedded routers called the *String Interpolating Routing DSL*, or sird for short.  This DSL has many uses, including embedding a light weight Play server, providing custom or more advanced routing capabilities to a regular Play application, and mocking REST services for testing.
 
 Sird is based on a string interpolated extractor object.  Just as Scala supports interpolating parameters into strings for building strings (and any object for that matter), such as `s"Hello $to"`, the same mechanism can also be used to extract parameters out of strings, for example in case statements.
 
-The DSL lives in the [`play.api.routing.sird`](api/scala/play/api/routing/sird/package.html) package. Typically, you will want to import this package, as well as a few other packages:
+The DSL lives in the [`play.api.routing.sird`](api/scala/play/api/routing/sird/) package. Typically, you will want to import this package, as well as a few other packages:
 
 @[imports](code/ScalaSirdRouter.scala)
 
@@ -57,8 +57,29 @@ To further the point that these are just regular extractor objects, you can see 
 
 Configuring an application to use a sird Router can be achieved in many ways, depending on use case:
 
+### Using SIRD router from a routes files
+
+To use the routing DSL in conjunction with a regular Play project that uses [[a routes file|ScalaRouting]] and [[controllers|ScalaActions]], extend the [`SimpleRouter`](api/scala/play/api/routing/SimpleRouter.html):
+
+@[inject-sird-router](code/ApiRouter.scala)
+
+Add the following line to conf/routes:
+
+```
+->      /api                        api.ApiRouter
+```
+
+### Composing SIRD routers
+
+You can compose multiple routers together, because Routes are partial functions:
+
+``` scala
+mainRouter.routes.orElse(injectedOtherRouter.withPrefix("/prefix").routes)
+```
+
 ### Embedding play
-An example of embedding a play server with sird router can be found in [[Embedding Play|ScalaEmbeddingPlay]] section.
+
+An example of embedding a play server with sird router can be found in [[Embedding Play|ScalaEmbeddingPlayAkkaHttp]] section.
 
 ### Providing a DI router
 

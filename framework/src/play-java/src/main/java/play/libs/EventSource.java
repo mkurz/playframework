@@ -1,11 +1,10 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.libs;
 
 import akka.NotUsed;
 import akka.stream.javadsl.Flow;
-import akka.stream.javadsl.Source;
 import akka.util.ByteString;
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -36,9 +35,8 @@ import com.fasterxml.jackson.databind.JsonNode;
  */
 public class EventSource {
 
-
     /**
-     * Creates a flow of EventSource.Event to ByteString.
+     * @return a flow of EventSource.Event to ByteString.
      */
     public static Flow<EventSource.Event, ByteString, ?> flow() {
         Flow<Event, Event, NotUsed> flow = Flow.of(Event.class);

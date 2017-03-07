@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.libs.streams
 
@@ -15,7 +15,7 @@ import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-object AccumulatorSpec extends Specification {
+class AccumulatorSpec extends Specification {
 
   def withMaterializer[T](block: Materializer => T) = {
     val system = ActorSystem("test")
@@ -83,7 +83,7 @@ object AccumulatorSpec extends Specification {
       await(sum.through(Flow[Int].map(_ * 2)).run(source)) must_== 12
     }
 
-    "be able to be composed in a left to right asociate way" in withMaterializer { implicit m =>
+    "be able to be composed in a left to right associate way" in withMaterializer { implicit m =>
       await(source ~>: Flow[Int].map(_ * 2) ~>: sum) must_== 12
     }
 

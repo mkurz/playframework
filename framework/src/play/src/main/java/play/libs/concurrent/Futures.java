@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.libs.concurrent;
 
@@ -12,6 +12,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Utilities for creating {@link java.util.concurrent.CompletionStage}.
  */
@@ -20,12 +22,13 @@ public class Futures {
     private static Timer timer = new Timer(true);
 
     /**
-     * Combine the given promises into a single promise for the list of results.
+     * Combine the given CompletionStages into a single CompletionStage for the list of results.
      *
      * The sequencing operations are performed in the default ExecutionContext.
      *
-     * @param promises The promises to combine
-     * @return A single promise whose methods act on the list of redeemed promises
+     * @param promises The CompletionStages to combine
+     * @param <A> the type of the completion's result.
+     * @return A single CompletionStage whose methods act on the list of redeemed CompletionStages
      */
     public static <A> CompletionStage<List<A>> sequence(Iterable<? extends CompletionStage<A>> promises) {
         CompletableFuture<List<A>> result = CompletableFuture.completedFuture(new ArrayList<>());
@@ -39,59 +42,84 @@ public class Futures {
     }
 
     /**
-     * Combine the given promises into a single promise for the list of results.
+     * Combine the given CompletionStages into a single CompletionStage for the list of results.
      *
      * The sequencing operations are performed in the default ExecutionContext.
-     *
-     * @param promises The promises to combine
-     * @return A single promise whose methods act on the list of redeemed promises
+     * @param promises The CompletionStages to combine
+     * @param <A> the type of the completion's result.
+     * @return A single CompletionStage whose methods act on the list of redeemed CompletionStage
      */
     public static <A> CompletionStage<List<A>> sequence(CompletionStage<A>... promises) {
         return sequence(Arrays.asList(promises));
     }
 
     /**
-     * Create a Promise that is redeemed after a timeout.
+     * Create a CompletionStage that is redeemed after a timeout.  This method
+     * is useful for returning fallback values on timeout.
      *
-     * @param message The message to use to redeem the Promise.
+     * The underlying implementation uses TimerTask, which has a
+     * resolution in milliseconds.
+     *
+     * @param value The result value to use to complete the CompletionStage.
      * @param delay The delay (expressed with the corresponding unit).
-     * @param unit The Unit.
+     * @param unit The time unit, i.e. java.util.concurrent.TimeUnit.MILLISECONDS
+     * @param <A> the type of the completion's result.
+     * @return the CompletionStage wrapping the result value
      */
-    public static <A> CompletionStage<A> timeout(A message, long delay, TimeUnit unit) {
+    public static <A> CompletionStage<A> timeout(A value, long delay, TimeUnit unit) {
         CompletableFuture<A> future = new CompletableFuture<>();
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                future.complete(message);
+                future.complete(value);
             }
         }, unit.toMillis(delay));
         return future;
     }
 
     /**
-     * Create a Promise timer that throws a PromiseTimeoutException after
+     * Creates a CompletionStage timer that throws a PromiseTimeoutException after
      * a given timeout.
      *
-     * The returned Promise is usually combined with other Promises.
+     * The returned CompletionStage is usually combined with other CompletionStage,
+     * i.e. {@code completionStage.applyToEither(timeout, Function.identity()) }
+     *
+     * The underlying implementation uses TimerTask, which has a
+     * resolution in milliseconds.
+     *
+     * A previous implementation used {@code CompletionStage<Void>} which made
+     * it unsuitable for composition.  Cast with {@code Futures.<Void>timeout} if
+     * necessary.
      *
      * @param delay The delay (expressed with the corresponding unit).
-     * @param unit The Unit.
-     * @return a promise without a real value
+     * @param unit The time Unit.
+     * @param <A> the type of the completion's result.
+     * @return a CompletionStage that failed exceptionally
      */
-    public static CompletionStage<Void> timeout(long delay, TimeUnit unit) {
-        return timeout(null, delay, unit).thenApply(n -> {
-            throw new F.PromiseTimeoutException("Timeout in promise");
-        });
+    public static <A> CompletionStage<A> timeout(final long delay, final TimeUnit unit) {
+        requireNonNull(unit, "Null unit");
+        final CompletableFuture<A> future = new CompletableFuture<>();
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                String msg = "Timeout in promise after " + delay + " " + unit.toString();
+                final F.PromiseTimeoutException ex = new F.PromiseTimeoutException(msg);
+                future.completeExceptionally(ex);
+            }
+        }, unit.toMillis(delay));
+        return future;
     }
 
     /**
-     * Create a Promise which, after a delay, will be redeemed with the result of a
+     * Create a CompletionStage which, after a delay, will be redeemed with the result of a
      * given supplier. The supplier will be called after the delay.
      *
-     * @param supplier The supplier to call to fulfill the Promise.
+     * @param supplier The supplier to call to fulfill the CompletionStage.
      * @param delay The time to wait.
      * @param unit The units to use for the delay.
      * @param executor The executor to run the supplier in.
+     * @param <A> the type of the completion's result.
+     * @return the delayed CompletionStage wrapping supplier.
      */
     public static <A> CompletionStage<A> delayed(Supplier<A> supplier, long delay, TimeUnit unit, Executor executor) {
         CompletableFuture<A> future = new CompletableFuture<>();

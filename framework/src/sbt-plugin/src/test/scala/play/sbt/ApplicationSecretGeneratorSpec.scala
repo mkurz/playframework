@@ -1,25 +1,25 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.sbt
 
 import com.typesafe.config.ConfigFactory
 import org.specs2.mutable._
 
-object ApplicationSecretGeneratorSpec extends Specification {
+class ApplicationSecretGeneratorSpec extends Specification {
   "ApplicationSecretGenerator" should {
     "override literal secret" in {
       val configContent =
         """
           |# test configuration
-          |play.crypto.secret=changeme
+          |play.http.secret.key=changeme
           |""".stripMargin
       val config = ConfigFactory.parseString(configContent)
       val lines = configContent.split("\n").toList
       val newLines: List[String] = ApplicationSecretGenerator.getUpdatedSecretLines("newSecret", lines, config)
 
       val newConfig = ConfigFactory.parseString(newLines.mkString("\n"))
-      newConfig.getString("play.crypto.secret").should_===("newSecret")
+      newConfig.getString("play.http.secret.key").should_===("newSecret")
     }
 
     "override nested secret" in {
@@ -27,8 +27,10 @@ object ApplicationSecretGeneratorSpec extends Specification {
         """
           |# test configuration
           |play {
-          |  crypto {
-          |    secret=changeme
+          |  http {
+          |    secret {
+          |      key=changeme
+          |    }
           |  }
           |}
           |""".stripMargin
@@ -37,20 +39,24 @@ object ApplicationSecretGeneratorSpec extends Specification {
       val newLines: List[String] = ApplicationSecretGenerator.getUpdatedSecretLines("newSecret", lines, config)
 
       val newConfig = ConfigFactory.parseString(newLines.mkString("\n"))
-      newConfig.getString("play.crypto.secret").should_===("newSecret")
+      newConfig.getString("play.http.secret.key").should_===("newSecret")
     }
 
-    "deletes existing nested application.secret while overriting secret" in {
+    "deletes existing nested play.crypto.secret while overwriting secret" in {
       val configContent =
         """
           |# test configuration
           |play {
-          |  crypto {
-          |    secret=changeme
+          |  http {
+          |    secret {
+          |      key=changeme
+          |    }
           |  }
           |}
-          |application {
-          |  secret=deleteme
+          |play {
+          |  crypto {
+          |    secret=deleteme
+          |  }
           |}
           |""".stripMargin
       val config = ConfigFactory.parseString(configContent)
@@ -58,20 +64,22 @@ object ApplicationSecretGeneratorSpec extends Specification {
       val newLines: List[String] = ApplicationSecretGenerator.getUpdatedSecretLines("newSecret", lines, config)
 
       val newConfig = ConfigFactory.parseString(newLines.mkString("\n"))
-      newConfig.getString("play.crypto.secret") must_== ("newSecret")
-      newConfig.hasPath("application.secret") must beFalse
+      newConfig.getString("play.http.secret.key") must_== "newSecret"
+      newConfig.hasPath("play.crypto.secret") must beFalse
     }
 
-    "deletes existing fixed application.secret while overriting secret" in {
+    "deletes existing fixed play.crypto.secret while overwriting secret" in {
       val configContent =
         """
           |# test configuration
           |play {
-          |  crypto {
-          |    secret=changeme
+          |  http {
+          |    secret {
+          |      key=changeme
+          |    }
           |  }
           |}
-          |application.secret=deleteme
+          |play.crypto.secret=deleteme
           |
           |""".stripMargin
       val config = ConfigFactory.parseString(configContent)
@@ -79,8 +87,8 @@ object ApplicationSecretGeneratorSpec extends Specification {
       val newLines: List[String] = ApplicationSecretGenerator.getUpdatedSecretLines("newSecret", lines, config)
 
       val newConfig = ConfigFactory.parseString(newLines.mkString("\n"))
-      newConfig.getString("play.crypto.secret") must_== ("newSecret")
-      newConfig.hasPath("application.secret") must beFalse
+      newConfig.getString("play.http.secret.key") must_== "newSecret"
+      newConfig.hasPath("play.crypto.secret") must beFalse
     }
   }
 }

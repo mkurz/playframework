@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Compile Time Dependency Injection
 
 Out of the box, Play provides a mechanism for runtime dependency injection - that is, dependency injection where dependencies aren't wired until runtime.  This approach has both advantages and disadvantages, the main advantages being around minimisation of boilerplate code, the main disadvantage being that the construction of the application is not validated at compile time.
@@ -27,7 +27,7 @@ To configure Play to use this application loader, configure the `play.applicatio
 
     play.application.loader=MyApplicationLoader
 
-In addition, if you're modifying an existing project that uses the built-in Guice module, you should be able to remove `guiceSupport` from your `libraryDependencies` in `build.sbt`.
+In addition, if you're modifying an existing project that uses the built-in Guice module, you should be able to remove `guice` from your `libraryDependencies` in `build.sbt`.
 
 ## Configuring Logging
 
@@ -79,3 +79,5 @@ To use this router in an actual application:
 As described before, Play provides a number of helper traits for wiring in other components.  For example, if you wanted to use the messages module, you can mix in [I18nComponents](api/scala/play/api/i18n/I18nComponents.html) into your components cake, like so:
 
 @[messages](code/CompileTimeDependencyInjection.scala)
+
+Other helper traits are also available as the [CSRFComponents](api/scala/play/filters/csrf/CSRFComponents.html) or the [AhcWSComponents](api/scala/play/api/libs/ws/ahc/AhcWSComponents.html)

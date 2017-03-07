@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db.evolutions
 
 import org.specs2.mutable.Specification
 
-object ScriptSpec extends Specification {
+class ScriptSpec extends Specification {
   "Script.statements" should {
 
     "separate SQL into semicolon-delimited statements" in {

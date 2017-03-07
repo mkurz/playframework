@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.views
 
@@ -7,7 +7,7 @@ import play.api.{ Configuration, Environment, Mode }
 import play.api.http.DefaultHttpErrorHandler
 import play.api.test._
 
-object DevErrorPageSpec extends PlaySpecification {
+class DevErrorPageSpec extends PlaySpecification {
 
   "devError.scala.html" should {
 

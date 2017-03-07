@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.inject.guice;
 
@@ -52,8 +52,8 @@ public class GuiceApplicationBuilderTest {
             .injector()
             .instanceOf(Application.class);
 
-        assertThat(app.configuration().getInt("a"), is(1));
-        assertThat(app.configuration().getInt("b"), is(2));
+        assertThat(app.config().getInt("a"), is(1));
+        assertThat(app.config().getInt("b"), is(2));
         assertThat(app.injector().instanceOf(A.class), instanceOf(A2.class));
     }
 
@@ -69,30 +69,20 @@ public class GuiceApplicationBuilderTest {
     }
 
     @Test
-    public void disableLoadedModules() {
-        Injector injector = new GuiceApplicationBuilder()
-            .disable(play.api.i18n.I18nModule.class)
-            .injector();
-
-        exception.expect(com.google.inject.ConfigurationException.class);
-        injector.instanceOf(play.api.i18n.Langs.class);
-    }
-
-    @Test
     public void setInitialConfigurationLoader() {
         Config extra = ConfigFactory.parseMap(ImmutableMap.of("a", 1));
         Application app = new GuiceApplicationBuilder()
             .withConfigLoader(env -> extra.withFallback(ConfigFactory.load(env.classLoader())))
             .build();
 
-        assertThat(app.configuration().getInt("a"), is(1));
+        assertThat(app.config().getInt("a"), is(1));
     }
 
     @Test
     public void setModuleLoader() {
         Injector injector = new GuiceApplicationBuilder()
-            .load((env, conf) -> ImmutableList.of(
-                Guiceable.modules(new play.api.inject.BuiltinModule()),
+            .withModuleLoader((env, conf) -> ImmutableList.of(
+                Guiceable.modules(new play.api.inject.BuiltinModule(), new play.api.i18n.I18nModule()),
                 Guiceable.bindings(bind(A.class).to(A1.class))))
             .injector();
 
@@ -103,7 +93,7 @@ public class GuiceApplicationBuilderTest {
     public void setLoadedModulesDirectly() {
         Injector injector = new GuiceApplicationBuilder()
             .load(
-                Guiceable.modules(new play.api.inject.BuiltinModule()),
+                Guiceable.modules(new play.api.inject.BuiltinModule(), new play.api.i18n.I18nModule()),
                 Guiceable.bindings(bind(A.class).to(A1.class)))
             .injector();
 

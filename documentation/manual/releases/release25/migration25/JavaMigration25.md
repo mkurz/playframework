@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Java Migration Guide
 
 In order to better fit in to the Java 8 ecosystem, and to allow Play Java users to make more idiomatic use of Java in their applications, Play has switched to using a number of Java 8 types such as `CompletionStage` and `Function`. Play also has new Java APIs for `EssentialAction`, `EssentialFilter`, `Router`, `BodyParser` and `HttpRequestHandler`.
@@ -16,6 +16,24 @@ You will most likely use `EssentialAction` when creating a filter. You can eithe
 The [`HttpRequestHandler`](api/java/play/http/HttpRequestHandler.html) actually existed in Play 2.4, but now it serves a different purpose. The `createAction` and `wrapAction` methods have been moved to a new interface called [`ActionCreator`](api/java/play/http/ActionCreator.html), and are deprecated in `HttpRequestHandler`. These methods are only applied to Java actions, and are used to intercept requests to the controller's method call, but not all requests.
 
 In 2.5, `HttpRequestHandler`'s main purpose is to provide a handler for the request right after it comes in. This is now consistent with what the Scala implementation does, and provides a way for Java users to intercept the handling of all HTTP requests. Normally, the `HttpRequestHandler` will call the router to find an action for the request, so the new API allows you to intercept that request in Java before it goes to the router.
+
+## Using CompletionStage inside an Action
+
+You must supply the HTTP execution context explicitly as an executor when using a Java `CompletionStage` inside an [[Action|JavaActions]], to ensure that the HTTP.Context remains in scope.  If you don't supply the HTTP execution context, you'll get "There is no HTTP Context available from here" errors when you call `request()` or other methods that depend on `Http.Context`.
+
+You can supply the [`play.libs.concurrent.HttpExecutionContext`](api/java/play/libs/concurrent/HttpExecutionContext.html) instance through dependency injection:
+
+``` java
+public class Application extends Controller {
+    @Inject HttpExecutionContext ec;
+
+    public CompletionStage<Result> index() {
+        someCompletableFuture.supplyAsync(() -> { 
+          // do something with request()
+        }, ec.current());
+    }
+}
+```
 
 ## Replaced functional types with Java 8 functional types
 

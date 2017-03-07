@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+// Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
 //
 
 name := "dist-sample"
@@ -8,9 +8,9 @@ version := "1.0-SNAPSHOT"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
-libraryDependencies += guiceSupport
+libraryDependencies += guice
 
-scalaVersion := Option(System.getProperty("scala.version")).getOrElse("2.11.7")
+scalaVersion := Option(System.getProperty("scala.version")).getOrElse("2.12.1")
 
 routesGenerator := InjectedRoutesGenerator
 

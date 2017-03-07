@@ -1,8 +1,9 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package javaguide.tests.guice;
 
+import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import com.google.common.collect.ImmutableMap;
 import java.io.File;
@@ -12,12 +13,10 @@ import java.util.Map;
 import org.junit.Rule;
 import org.junit.rules.ExpectedException;
 import org.junit.Test;
-import play.api.inject.Binding;
-import play.Configuration;
 import play.Environment;
 import play.Mode;
+import play.api.Configuration;
 import play.mvc.Result;
-import scala.collection.Seq;
 
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
@@ -53,8 +52,8 @@ public class JavaGuiceApplicationBuilderTest {
         ClassLoader classLoader = new URLClassLoader(new URL[0]);
         // #set-environment
         Application application = new GuiceApplicationBuilder()
-            .load(new play.api.inject.BuiltinModule(), new play.inject.BuiltInModule()) // ###skip
-            .loadConfig(Configuration.reference()) // ###skip
+            .load(new play.api.inject.BuiltinModule(), new play.inject.BuiltInModule(), new play.api.i18n.I18nModule()) // ###skip
+            .loadConfig(ConfigFactory.defaultReference()) // ###skip
             .in(new Environment(new File("path/to/app"), classLoader, Mode.TEST))
             .build();
         // #set-environment
@@ -69,8 +68,8 @@ public class JavaGuiceApplicationBuilderTest {
         ClassLoader classLoader = new URLClassLoader(new URL[0]);
         // #set-environment-values
         Application application = new GuiceApplicationBuilder()
-            .load(new play.api.inject.BuiltinModule(), new play.inject.BuiltInModule()) // ###skip
-            .loadConfig(Configuration.reference()) // ###skip
+            .load(new play.api.inject.BuiltinModule(), new play.inject.BuiltInModule(), new play.api.i18n.I18nModule()) // ###skip
+            .loadConfig(ConfigFactory.defaultReference()) // ###skip
             .in(new File("path/to/app"))
             .in(Mode.TEST)
             .in(classLoader)
@@ -85,7 +84,7 @@ public class JavaGuiceApplicationBuilderTest {
     @Test
     public void addConfiguration() {
         // #add-configuration
-        Configuration extraConfig = new Configuration(ImmutableMap.of("a", 1));
+        Config extraConfig = ConfigFactory.parseMap(ImmutableMap.of("a", 1));
         Map<String, Object> configMap = ImmutableMap.of("b", 2, "c", "three");
 
         Application application = new GuiceApplicationBuilder()
@@ -95,10 +94,10 @@ public class JavaGuiceApplicationBuilderTest {
             .build();
         // #add-configuration
 
-        assertThat(application.configuration().getInt("a"), equalTo(1));
-        assertThat(application.configuration().getInt("b"), equalTo(2));
-        assertThat(application.configuration().getString("c"), equalTo("three"));
-        assertThat(application.configuration().getString("key"), equalTo("value"));
+        assertThat(application.config().getInt("a"), equalTo(1));
+        assertThat(application.config().getInt("b"), equalTo(2));
+        assertThat(application.config().getString("c"), equalTo("three"));
+        assertThat(application.config().getString("key"), equalTo("value"));
     }
 
     @Test
@@ -145,6 +144,7 @@ public class JavaGuiceApplicationBuilderTest {
             .load(
                 Guiceable.modules(
                     new play.api.inject.BuiltinModule(),
+                    new play.api.i18n.I18nModule(),
                     new play.inject.BuiltInModule()
                 ),
                 Guiceable.bindings(

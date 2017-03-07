@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.http
 
@@ -50,7 +50,7 @@ object HttpFilters {
 /**
  * A filters provider that provides no filters.
  */
-class NoHttpFilters extends DefaultHttpFilters
+class NoHttpFilters @Inject() () extends DefaultHttpFilters
 
 object NoHttpFilters extends NoHttpFilters
 

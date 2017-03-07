@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Play %PLAY_VERSION% documentation
 
 > Play is a high-productivity Java and Scala web application framework that integrates the components and APIs you need for modern web application development. 
@@ -7,8 +7,8 @@
 
 ## Latest release
 
-- [[What's new in Play 2.5?|Highlights25]]
-- [[Play 2.5 Migration Guide|Migration25]]
+- [[What's new in Play 2.6?|Highlights26]]
+- [[Play 2.6 Migration Guide|Migration26]]
 - [[Other Play releases|Releases]]
 
 

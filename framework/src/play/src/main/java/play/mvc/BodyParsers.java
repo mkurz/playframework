@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.mvc;
 
@@ -13,7 +13,6 @@ import play.libs.streams.Accumulator;
 import play.core.j.JavaParsers;
 
 import akka.util.ByteString;
-import akka.stream.Materializer;
 
 /**
  * Utilities for creating body parsers.

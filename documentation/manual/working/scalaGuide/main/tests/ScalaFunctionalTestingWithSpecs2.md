@@ -1,7 +1,7 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Writing functional tests with specs2
 
-Play provides a number of classes and convenience methods that assist with functional testing.  Most of these can be found either in the [`play.api.test`](api/scala/play/api/test/package.html) package or in the [`Helpers`](api/scala/play/api/test/Helpers$.html) object.
+Play provides a number of classes and convenience methods that assist with functional testing.  Most of these can be found either in the [`play.api.test`](api/scala/play/api/test/) package or in the [`Helpers`](api/scala/play/api/test/Helpers$.html) object.
 
 You can add these methods and classes by importing the following:
 
@@ -57,7 +57,7 @@ You can call any `Action` code by providing a [`FakeRequest`](api/scala/play/api
 
 @[scalafunctionaltest-functionalexamplecontrollerspec](code/specs2/FunctionalExampleControllerSpec.scala)
 
-Technically, you don't need [`WithApplication`](api/scala/play/api/test/WithApplication.html) here, although it wouldn't hurt anything to have it.
+Technically, you don't need [`WithApplication`](api/scala/play/api/test/WithApplication.html) here, because you can instantiate the controller directly -- however, direct controller instantiation is more of a unit test of the controller than a functional test.
 
 ## Testing the router
 

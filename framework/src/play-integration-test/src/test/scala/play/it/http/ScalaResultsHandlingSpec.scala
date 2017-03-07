@@ -1,10 +1,11 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.http
 
 import java.util.Locale.ENGLISH
-import java.util.concurrent.{ LinkedBlockingQueue }
+import java.util.concurrent.LinkedBlockingQueue
+
 import akka.stream.scaladsl.Source
 import akka.util.{ ByteString, Timeout }
 import play.api._
@@ -19,12 +20,16 @@ import play.api.libs.ws._
 import play.api.libs.EventSource
 import play.core.server.common.ServerResultException
 import play.it._
+
 import scala.util.Try
 import scala.concurrent.Future
-import play.api.http.{ HttpEntity, HttpChunk, Status }
+import play.api.http.{ HttpChunk, HttpEntity, Status }
+import play.core.utils.CaseInsensitiveOrdered
 
-object NettyScalaResultsHandlingSpec extends ScalaResultsHandlingSpec with NettyIntegrationSpecification
-object AkkaHttpScalaResultsHandlingSpec extends ScalaResultsHandlingSpec with AkkaHttpIntegrationSpecification
+import scala.collection.immutable.TreeMap
+
+class NettyScalaResultsHandlingSpec extends ScalaResultsHandlingSpec with NettyIntegrationSpecification
+class AkkaHttpScalaResultsHandlingSpec extends ScalaResultsHandlingSpec with AkkaHttpIntegrationSpecification
 
 trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with ServerIntegrationSpecification {
 
@@ -41,11 +46,11 @@ trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with 
       tryRequest(result)(tryResult => block(tryResult.get))
     }
 
-    def withServer[T](result: => Result, errorHandler: HttpErrorHandler = DefaultHttpErrorHandler)(block: Port => T) = {
+    def withServer[T](result: => Result, errorHandler: HttpErrorHandler = DefaultHttpErrorHandler)(block: play.api.test.Port => T) = {
       val port = testServerPort
       val app = GuiceApplicationBuilder()
         .overrides(bind[HttpErrorHandler].to(errorHandler))
-        .routes { case _ => Action(result) }
+        .routes { case _ => ActionBuilder.ignoringBody(result) }
         .build()
       running(TestServer(port, app)) {
         block(port)
@@ -124,43 +129,43 @@ trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with 
     "close the connection when the connection close header is present" in withServer(
       Results.Ok
     ) { port =>
-        BasicHttpClient.makeRequests(port, checkClosed = true)(
-          BasicRequest("GET", "/", "HTTP/1.1", Map("Connection" -> "close"), "")
-        )(0).status must_== 200
-      }
+      BasicHttpClient.makeRequests(port, checkClosed = true)(
+        BasicRequest("GET", "/", "HTTP/1.1", Map("Connection" -> "close"), "")
+      )(0).status must_== 200
+    }
 
     "close the connection when the connection when protocol is HTTP 1.0" in withServer(
       Results.Ok
     ) { port =>
-        BasicHttpClient.makeRequests(port, checkClosed = true)(
-          BasicRequest("GET", "/", "HTTP/1.0", Map(), "")
-        )(0).status must_== 200
-      }
+      BasicHttpClient.makeRequests(port, checkClosed = true)(
+        BasicRequest("GET", "/", "HTTP/1.0", Map(), "")
+      )(0).status must_== 200
+    }
 
     "honour the keep alive header for HTTP 1.0" in withServer(
       Results.Ok
     ) { port =>
-        val responses = BasicHttpClient.makeRequests(port)(
-          BasicRequest("GET", "/", "HTTP/1.0", Map("Connection" -> "keep-alive"), ""),
-          BasicRequest("GET", "/", "HTTP/1.0", Map(), "")
-        )
-        responses(0).status must_== 200
-        responses(0).headers.get(CONNECTION) must beSome.like {
-          case s => s.toLowerCase(ENGLISH) must_== "keep-alive"
-        }
-        responses(1).status must_== 200
+      val responses = BasicHttpClient.makeRequests(port)(
+        BasicRequest("GET", "/", "HTTP/1.0", Map("Connection" -> "keep-alive"), ""),
+        BasicRequest("GET", "/", "HTTP/1.0", Map(), "")
+      )
+      responses(0).status must_== 200
+      responses(0).headers.get(CONNECTION) must beSome.like {
+        case s => s.toLowerCase(ENGLISH) must_== "keep-alive"
       }
+      responses(1).status must_== 200
+    }
 
     "keep alive HTTP 1.1 connections" in withServer(
       Results.Ok
     ) { port =>
-        val responses = BasicHttpClient.makeRequests(port)(
-          BasicRequest("GET", "/", "HTTP/1.1", Map(), ""),
-          BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
-        )
-        responses(0).status must_== 200
-        responses(1).status must_== 200
-      }
+      val responses = BasicHttpClient.makeRequests(port)(
+        BasicRequest("GET", "/", "HTTP/1.1", Map(), ""),
+        BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
+      )
+      responses(0).status must_== 200
+      responses(1).status must_== 200
+    }
 
     "close chunked connections when requested" in withServer(
       Results.Ok.chunked(Source(List("a", "b", "c")))
@@ -183,7 +188,8 @@ trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with 
       }
 
     "allow sending trailers" in withServer(
-      Result(ResponseHeader(200, Map(TRANSFER_ENCODING -> CHUNKED, TRAILER -> "Chunks")),
+      Result(
+        ResponseHeader(200, Map(TRANSFER_ENCODING -> CHUNKED, TRAILER -> "Chunks")),
         HttpEntity.Chunked(Source(List(
           chunk("aa"), chunk("bb"), chunk("cc"), HttpChunk.LastChunk(new Headers(Seq("Chunks" -> "3")))
         )), None)
@@ -214,13 +220,13 @@ trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with 
     "Strip malformed cookies" in withServer(
       Results.Ok
     ) { port =>
-        val response = BasicHttpClient.makeRequests(port)(
-          BasicRequest("GET", "/", "HTTP/1.1", Map("Cookie" -> """£"""), "")
-        )(0)
+      val response = BasicHttpClient.makeRequests(port)(
+        BasicRequest("GET", "/", "HTTP/1.1", Map("Cookie" -> """£"""), "")
+      )(0)
 
-        response.status must_== 200
-        response.body must beLeft
-      }
+      response.status must_== 200
+      response.body must beLeft
+    }
 
     "reject HTTP 1.0 requests for chunked results" in withServer(
       Results.Ok.chunked(Source(List("a", "b", "c"))),
@@ -258,19 +264,19 @@ trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with 
       Results.Ok
     ) { port =>
 
-        forall(List(
-          "aaa" -> "bbb\fccc",
-          "ddd" -> "eee\u000bfff"
-        )) { header =>
+      forall(List(
+        "aaa" -> "bbb\fccc",
+        "ddd" -> "eee\u000bfff"
+      )) { header =>
 
-          val response = BasicHttpClient.makeRequests(port)(
-            BasicRequest("GET", "/", "HTTP/1.1", Map(header), "")
-          ).head
+        val response = BasicHttpClient.makeRequests(port)(
+          BasicRequest("GET", "/", "HTTP/1.1", Map(header), "")
+        ).head
 
-          response.status must_== 400
-          response.body must beLeft
-        }
+        response.status must_== 400
+        response.body must beLeft
       }
+    }
 
     "split Set-Cookie headers" in {
       import play.api.mvc.Cookie
@@ -290,30 +296,37 @@ trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with 
       }
     }
 
+    "not have a message body even when a 100 response with a non-empty body is returned" in withServer(
+      Result(
+        header = ResponseHeader(CONTINUE),
+        body = HttpEntity.Strict(ByteString("foo"), None)
+      )
+    ) { port =>
+        val response = BasicHttpClient.makeRequests(port)(
+          BasicRequest("POST", "/", "HTTP/1.1", Map(), "")
+        ).head
+        response.body must beLeft("")
+        response.headers.get(CONTENT_LENGTH) must beNone
+      }
+
+    "not have a message body even when a 101 response with a non-empty body is returned" in withServer(
+      Result(
+        header = ResponseHeader(SWITCHING_PROTOCOLS),
+        body = HttpEntity.Strict(ByteString("foo"), None)
+      )
+    ) { port =>
+        val response = BasicHttpClient.makeRequests(port)(
+          BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
+        ).head
+        response.body must beLeft("")
+        response.headers.get(CONTENT_LENGTH) must beNone
+      }
+
     "not have a message body even when a 204 response with a non-empty body is returned" in withServer(
-      Result(header = ResponseHeader(NO_CONTENT),
+      Result(
+        header = ResponseHeader(NO_CONTENT),
         body = HttpEntity.Strict(ByteString("foo"), None)
       )
-    ) { port =>
-        val response = BasicHttpClient.makeRequests(port)(
-          BasicRequest("PUT", "/", "HTTP/1.1", Map(), "")
-        ).head
-        response.body must beLeft("")
-      }
-
-    "not have a message body even when a 304 response with a non-empty body is returned" in withServer(
-      Result(header = ResponseHeader(NOT_MODIFIED),
-        body = HttpEntity.Strict(ByteString("foo"), None)
-      )
-    ) { port =>
-        val response = BasicHttpClient.makeRequests(port)(
-          BasicRequest("PUT", "/", "HTTP/1.1", Map(), "")
-        ).head
-        response.body must beLeft("")
-      }
-
-    "not have a message body, nor Content-Length, when a 204 response is returned" in withServer(
-      Results.NoContent
     ) { port =>
         val response = BasicHttpClient.makeRequests(port)(
           BasicRequest("PUT", "/", "HTTP/1.1", Map(), "")
@@ -322,34 +335,96 @@ trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with 
         response.headers.get(CONTENT_LENGTH) must beNone
       }
 
-    "not have a message body, but may have a Content-Length, when a 204 response with an explicit Content-Length is returned" in withServer(
+    "not have a message body even when a 304 response with a non-empty body is returned" in withServer(
+      Result(
+        header = ResponseHeader(NOT_MODIFIED),
+        body = HttpEntity.Strict(ByteString("foo"), None)
+      )
+    ) { port =>
+        val response = BasicHttpClient.makeRequests(port)(
+          BasicRequest("PUT", "/", "HTTP/1.1", Map(), "")
+        ).head
+        response.body must beLeft("")
+      }
+
+    "not have a message body, nor Content-Length, when a 100 response is returned" in withServer(
+      Results.Continue
+    ) { port =>
+      val response = BasicHttpClient.makeRequests(port)(
+        BasicRequest("POST", "/", "HTTP/1.1", Map(), "")
+      ).head
+      response.body must beLeft("")
+      response.headers.get(CONTENT_LENGTH) must beNone
+    }
+
+    "not have a message body, nor Content-Length, when a 101 response is returned" in withServer(
+      Results.SwitchingProtocols
+    ) { port =>
+      val response = BasicHttpClient.makeRequests(port)(
+        BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
+      ).head
+      response.body must beLeft("")
+      response.headers.get(CONTENT_LENGTH) must beNone
+    }
+
+    "not have a message body, nor Content-Length, when a 204 response is returned" in withServer(
+      Results.NoContent
+    ) { port =>
+      val response = BasicHttpClient.makeRequests(port)(
+        BasicRequest("PUT", "/", "HTTP/1.1", Map(), "")
+      ).head
+      response.body must beLeft("")
+      response.headers.get(CONTENT_LENGTH) must beNone
+    }
+
+    "not have a message body, nor Content-Length, when a 304 response is returned" in withServer(
+      Results.NotModified
+    ) { port =>
+      val response = BasicHttpClient.makeRequests(port)(
+        BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
+      ).head
+      response.body must beLeft("")
+      response.headers.get(CONTENT_LENGTH) must beNone
+    }
+
+    "not have a message body, nor Content-Length, even when a 100 response with an explicit Content-Length is returned" in withServer(
+      Results.Continue.withHeaders("Content-Length" -> "0")
+    ) { port =>
+        val response = BasicHttpClient.makeRequests(port)(
+          BasicRequest("POST", "/", "HTTP/1.1", Map(), "")
+        ).head
+        response.body must beLeft("")
+        response.headers.get(CONTENT_LENGTH) must beNone
+      }
+
+    "not have a message body, nor Content-Length, even when a 101 response with an explicit Content-Length is returned" in withServer(
+      Results.SwitchingProtocols.withHeaders("Content-Length" -> "0")
+    ) { port =>
+        val response = BasicHttpClient.makeRequests(port)(
+          BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
+        ).head
+        response.body must beLeft("")
+        response.headers.get(CONTENT_LENGTH) must beNone
+      }
+
+    "not have a message body, nor Content-Length, even when a 204 response with an explicit Content-Length is returned" in withServer(
       Results.NoContent.withHeaders("Content-Length" -> "0")
     ) { port =>
         val response = BasicHttpClient.makeRequests(port)(
           BasicRequest("PUT", "/", "HTTP/1.1", Map(), "")
         ).head
         response.body must beLeft("")
-        response.headers.get(CONTENT_LENGTH) must beOneOf(None, Some("0")) // Both header values are valid
-      }
-
-    "not have a message body, nor a Content-Length, when a 304 response is returned" in withServer(
-      Results.NotModified
-    ) { port =>
-        val response = BasicHttpClient.makeRequests(port)(
-          BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
-        ).head
-        response.body must beLeft("")
         response.headers.get(CONTENT_LENGTH) must beNone
       }
 
-    "not have a message body, but may have a Content-Length, when a 304 response with an explicit Content-Length is returned" in withServer(
+    "not have a message body, nor Content-Length, even when a 304 response with an explicit Content-Length is returned" in withServer(
       Results.NotModified.withHeaders("Content-Length" -> "0")
     ) { port =>
         val response = BasicHttpClient.makeRequests(port)(
           BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
         ).head
         response.body must beLeft("")
-        response.headers.get(CONTENT_LENGTH) must beOneOf(None, Some("0")) // Both header values are valid
+        response.headers.get(CONTENT_LENGTH) must beNone
       }
 
     "return a 500 response if a forbidden character is used in a response's header field" in withServer(
@@ -373,7 +448,7 @@ trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with 
           BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
         ).head
         response.status must_== 500
-        (response.headers -- Set(CONNECTION, CONTENT_LENGTH, DATE, SERVER)) must be(Map.empty)
+        (response.headers -- Set(CONNECTION, CONTENT_LENGTH, DATE, SERVER)) must be empty
       }
 
     "return a 500 response if an error occurs during the onError" in withServer(
@@ -390,7 +465,7 @@ trait ScalaResultsHandlingSpec extends PlaySpecification with WsTestClient with 
           BasicRequest("GET", "/", "HTTP/1.1", Map(), "")
         ).head
         response.status must_== 500
-        (response.headers -- Set(CONNECTION, CONTENT_LENGTH, DATE, SERVER)) must be(Map.empty)
+        (response.headers -- Set(CONNECTION, CONTENT_LENGTH, DATE, SERVER)) must be empty
       }
   }
 

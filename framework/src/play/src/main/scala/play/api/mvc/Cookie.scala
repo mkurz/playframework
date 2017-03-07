@@ -1,15 +1,18 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
-import java.net.{URLDecoder, URLEncoder}
+import java.net.{ URLDecoder, URLEncoder }
 import java.util.Locale
+import javax.inject.Inject
 
 import play.api._
 import play.api.http._
 import play.api.libs.crypto.CookieSigner
+import play.mvc.Http.{ Cookie => JCookie }
 
+import scala.collection.immutable.ListMap
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -22,9 +25,24 @@ import scala.util.control.NonFatal
  * @param path the cookie path, defaulting to the root path `/`
  * @param domain the cookie domain
  * @param secure whether this cookie is secured, sent only for HTTPS requests
- * @param httpOnly whether this cookie is HTTP only, i.e. not accessible from client-side JavaScipt code
+ * @param httpOnly whether this cookie is HTTP only, i.e. not accessible from client-side JavaScript code
  */
-case class Cookie(name: String, value: String, maxAge: Option[Int] = None, path: String = "/", domain: Option[String] = None, secure: Boolean = false, httpOnly: Boolean = true)
+case class Cookie(name: String, value: String, maxAge: Option[Int] = None, path: String = "/",
+    domain: Option[String] = None, secure: Boolean = false, httpOnly: Boolean = true) {
+  lazy val asJava = {
+    new JCookie(name, value, maxAge.map(i => new Integer(i)).orNull, path, domain.orNull, secure, httpOnly)
+  }
+}
+
+object Cookie {
+  import scala.concurrent.duration._
+
+  /**
+   * The cookie's max age, in seconds, when we expire the cookie. This is also used to determine Expires. It's set
+   * to one day ago to work for clients that only support Expires and have a clock that is slightly behind.
+   */
+  val DiscardedMaxAge: Int = -1.day.toSeconds.toInt
+}
 
 /**
  * A cookie to be discarded.  This contains only the data necessary for discarding a cookie.
@@ -35,7 +53,7 @@ case class Cookie(name: String, value: String, maxAge: Option[Int] = None, path:
  * @param secure whether this cookie is secured
  */
 case class DiscardingCookie(name: String, path: String = "/", domain: Option[String] = None, secure: Boolean = false) {
-  def toCookie = Cookie(name, "", Some(-86400), path, domain, secure)
+  def toCookie = Cookie(name, "", Some(Cookie.DiscardedMaxAge), path, domain, secure)
 }
 
 /**
@@ -57,8 +75,28 @@ trait Cookies extends Traversable[Cookie] {
 /**
  * Helper utilities to encode Cookies.
  */
-object Cookies {
-  private def config: CookiesConfiguration = HttpConfiguration.current.cookies
+@deprecated("Inject [[play.api.mvc.CookieHeaderEncoding]] instead", "2.6.0")
+object Cookies extends CookieHeaderEncoding {
+
+  // Use global state for cookie header configuration
+  override protected def config: CookiesConfiguration = HttpConfiguration.current.cookies
+
+  def apply(cookies: Seq[Cookie]): Cookies = new Cookies {
+    lazy val cookiesByName = cookies.groupBy(_.name).mapValues(_.head)
+
+    override def get(name: String) = cookiesByName.get(name)
+
+    override def foreach[U](f: Cookie => U) = cookies.foreach(f)
+  }
+
+}
+
+/**
+ * Logic for encoding and decoding `Cookie` and `Set-Cookie` headers.
+ */
+trait CookieHeaderEncoding {
+
+  protected def config: CookiesConfiguration
 
   /**
    * Play doesn't support multiple values per header, so has to compress cookies into one header. The problem is,
@@ -196,16 +234,9 @@ object Cookies {
    * @return a valid Set-Cookie header value
    */
   def mergeSetCookieHeader(cookieHeader: String, cookies: Seq[Cookie]): String = {
-    val tupledCookies = (decodeSetCookieHeader(cookieHeader) ++ cookies).map { c =>
-      // See rfc6265#section-4.1.2
-      // Secure and http-only attributes are not considered when testing if
-      // two cookies are overlapping.
-      (c.name, c.path, c.domain.map(_.toLowerCase(Locale.ENGLISH))) -> c
-    }
-    // Put cookies in a map
-    // Note: Seq.toMap do not preserve order
-    val uniqCookies = scala.collection.immutable.ListMap(tupledCookies: _*)
-    encodeSetCookieHeader(uniqCookies.values.toSeq)
+    val rawCookies = decodeSetCookieHeader(cookieHeader) ++ cookies
+    val mergedCookies: Seq[Cookie] = CookieHeaderMerging.mergeSetCookieHeaderCookies(rawCookies)
+    encodeSetCookieHeader(mergedCookies)
   }
 
   /**
@@ -216,11 +247,49 @@ object Cookies {
    * @return a valid Cookie header value
    */
   def mergeCookieHeader(cookieHeader: String, cookies: Seq[Cookie]): String = {
-    val tupledCookies = (decodeCookieHeader(cookieHeader) ++ cookies).map(cookie => cookie.name -> cookie)
-    // Put cookies in a map
-    // Note: Seq.toMap do not preserve order
-    val uniqCookies = scala.collection.immutable.ListMap(tupledCookies: _*)
-    encodeCookieHeader(uniqCookies.values.toSeq)
+    val rawCookies = decodeCookieHeader(cookieHeader) ++ cookies
+    val mergedCookies: Seq[Cookie] = CookieHeaderMerging.mergeCookieHeaderCookies(rawCookies)
+    encodeCookieHeader(mergedCookies)
+  }
+}
+
+/**
+ * The default implementation of `CookieHeaders`.
+ */
+class DefaultCookieHeaderEncoding @Inject() (
+  override protected val config: CookiesConfiguration = CookiesConfiguration()) extends CookieHeaderEncoding
+
+/**
+ * Utilities for merging individual cookie values in HTTP cookie headers.
+ */
+object CookieHeaderMerging {
+
+  /**
+   * Merge the elements in a sequence so that there is only one occurrence of
+   * elements when mapped by a discriminator function.
+   */
+  private def mergeOn[A, B](input: Traversable[A], f: A => B): Seq[A] = {
+    val withMergeValue: Seq[(B, A)] = input.toSeq.map(el => (f(el), el))
+    ListMap(withMergeValue: _*).values.toSeq
+  }
+
+  /**
+   * Merges the cookies contained in a `Set-Cookie` header so that there's
+   * only one cookie for each name/path/domain triple.
+   */
+  def mergeSetCookieHeaderCookies(unmerged: Traversable[Cookie]): Seq[Cookie] = {
+    // See rfc6265#section-4.1.2
+    // Secure and http-only attributes are not considered when testing if
+    // two cookies are overlapping.
+    mergeOn(unmerged, (c: Cookie) => (c.name, c.path, c.domain.map(_.toLowerCase(Locale.ENGLISH))))
+  }
+
+  /**
+   * Merges the cookies contained in a `Cookie` header so that there's
+   * only one cookie for each name.
+   */
+  def mergeCookieHeaderCookies(unmerged: Traversable[Cookie]): Seq[Cookie] = {
+    mergeOn(unmerged, (c: Cookie) => c.name)
   }
 }
 
@@ -267,7 +336,7 @@ trait CookieBaker[T <: AnyRef] {
   /**
    *  The cookie path.
    */
-  def path = "/"
+  def path: String
 
   /**
    * The cookie signer.
@@ -294,10 +363,10 @@ trait CookieBaker[T <: AnyRef] {
 
     def urldecode(data: String) = {
       data
-          .split("&")
-          .map(_.split("=", 2))
-          .map(p => URLDecoder.decode(p(0), "UTF-8") -> URLDecoder.decode(p(1), "UTF-8"))
-          .toMap
+        .split("&")
+        .map(_.split("=", 2))
+        .map(p => URLDecoder.decode(p(0), "UTF-8") -> URLDecoder.decode(p(1), "UTF-8"))
+        .toMap
     }
 
     // Do not change this unless you understand the security issues behind timing attacks.
@@ -372,5 +441,4 @@ trait CookieBaker[T <: AnyRef] {
    * @return a new `Map` storing the key-value pairs for the given cookie
    */
   protected def serialize(cookie: T): Map[String, String]
-
 }

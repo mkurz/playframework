@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.libs.streams
 
@@ -45,7 +45,7 @@ private[play] object Execution {
      *       - a Runnable is running and trampoline is active
      *       - no more Runnables are enqueued for execution after the current Runnable
      *         completes
-     * - next: Runnable => 
+     * - next: Runnable =>
      *       - a Runnable is running and trampoline is active
      *       - one Runnable is scheduled for execution after the current Runnable
      *         completes
@@ -70,7 +70,7 @@ private[play] object Execution {
             runnable.run()
             executeScheduled()
           } finally {
-            // We've run all the Runnables, so show that the 
+            // We've run all the Runnables, so show that the
             // trampoline has been shut down.
             local.set(null)
           }

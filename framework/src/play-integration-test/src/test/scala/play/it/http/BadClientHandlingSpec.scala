@@ -1,19 +1,21 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.http
+
+import javax.inject.Inject
 
 import play.api.http.{ DefaultHttpErrorHandler, HttpErrorHandler }
 import play.api._
 import play.api.mvc._
-import play.api.routing.Router
+import play.api.routing.{ SimpleRouterImpl, Router }
 import play.api.test._
 import play.it._
 import scala.concurrent.Future
 import scala.util.Random
 
-object NettyBadClientHandlingSpec extends BadClientHandlingSpec with NettyIntegrationSpecification
-object AkkaHttpBadClientHandlingSpec extends BadClientHandlingSpec with AkkaHttpIntegrationSpecification
+class NettyBadClientHandlingSpec extends BadClientHandlingSpec with NettyIntegrationSpecification
+class AkkaHttpBadClientHandlingSpec extends BadClientHandlingSpec with AkkaHttpIntegrationSpecification
 
 trait BadClientHandlingSpec extends PlaySpecification with ServerIntegrationSpecification {
 
@@ -24,7 +26,7 @@ trait BadClientHandlingSpec extends PlaySpecification with ServerIntegrationSpec
 
       val app = new BuiltInComponentsFromContext(ApplicationLoader.createContext(Environment.simple())) {
         def router = Router.from {
-          case _ => Action(Results.Ok)
+          case _ => defaultActionBuilder(Results.Ok)
         }
         override lazy val httpErrorHandler = errorHandler
       }.application

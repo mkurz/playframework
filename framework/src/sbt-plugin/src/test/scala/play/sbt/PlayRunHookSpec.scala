@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.sbt
 
@@ -7,7 +7,7 @@ import org.specs2.mutable._
 
 import scala.collection.mutable.HashMap
 
-object PlayRunHookSpec extends Specification {
+class PlayRunHookSpec extends Specification {
 
   "PlayRunHook runner" should {
 

@@ -1,31 +1,29 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package javaguide.testhelpers {
 
-import java.util.concurrent.{CompletionStage, CompletableFuture}
+import java.util.concurrent.{CompletableFuture, CompletionStage}
 
-import akka.stream.Materializer
 import play.api.mvc.{Action, Request}
-import play.core.j.{DefaultJavaHandlerComponents, JavaHelpers, JavaActionAnnotations, JavaAction}
-import play.http.DefaultActionCreator
+import play.core.j._
 import play.mvc.{Controller, Http, Result}
 import play.api.test.Helpers
 import java.lang.reflect.Method
 
-abstract class MockJavaAction extends Controller with Action[Http.RequestBody] {
+import akka.stream.Materializer
+
+import scala.concurrent.ExecutionContext
+
+abstract class MockJavaAction(handlerComponents: JavaHandlerComponents) extends Controller with Action[Http.RequestBody] {
   self =>
 
-  private lazy val components = new DefaultJavaHandlerComponents(
-    play.api.Play.current.injector, new DefaultActionCreator
-  )
-
-  private lazy val action = new JavaAction(components) {
-    val annotations = new JavaActionAnnotations(controller, method)
+  private lazy val action = new JavaAction(handlerComponents) {
+    val annotations = new JavaActionAnnotations(controller, method, handlerComponents.httpConfiguration.actionComposition)
 
     def parser = {
       play.HandlerInvokerFactoryAccessor.javaBodyParserToScala(
-        components.getBodyParser(annotations.parser)
+        handlerComponents.getBodyParser(annotations.parser)
       )
     }
 
@@ -38,6 +36,8 @@ abstract class MockJavaAction extends Controller with Action[Http.RequestBody] {
 
   private val controller = this.getClass
   private val method = MockJavaActionJavaMocker.findActionMethod(this)
+
+  def executionContext: ExecutionContext = handlerComponents.executionContext
 
   def invocation = {
     method.invoke(this) match {
@@ -64,8 +64,8 @@ object MockJavaActionHelper {
     Helpers.await(Helpers.call(action, requestBuilder.build()._underlyingRequest, body)).asJava
   }
 
-  def setContext(request: play.mvc.Http.RequestBuilder): Unit = {
-    Http.Context.current.set(JavaHelpers.createJavaContext(request.build()._underlyingRequest))
+  def setContext(request: play.mvc.Http.RequestBuilder, contextComponents: JavaContextComponents): Unit = {
+    Http.Context.current.set(JavaHelpers.createJavaContext(request.build()._underlyingRequest, contextComponents))
   }
 
   def removeContext: Unit = Http.Context.current.remove()
@@ -83,7 +83,9 @@ object MockJavaActionHelper {
  */
 object MockJavaActionJavaMocker {
   def findActionMethod(obj: AnyRef): Method = {
-    val maybeMethod = obj.getClass.getDeclaredMethods.find(!_.isSynthetic)
+    val maybeMethod = obj.getClass.getDeclaredMethods.find { method =>
+      !method.isSynthetic && method.getParameterCount == 0
+    }
     val theMethod = maybeMethod.getOrElse(
       throw new RuntimeException("MockJavaAction must declare at least one non synthetic method")
     )
@@ -99,8 +101,8 @@ object MockJavaActionJavaMocker {
  */
 package play {
 
-object HandlerInvokerFactoryAccessor {
-  val javaBodyParserToScala = play.core.routing.HandlerInvokerFactory.javaBodyParserToScala _
-}
+  object HandlerInvokerFactoryAccessor {
+    val javaBodyParserToScala = play.core.routing.HandlerInvokerFactory.javaBodyParserToScala _
+  }
 
 }

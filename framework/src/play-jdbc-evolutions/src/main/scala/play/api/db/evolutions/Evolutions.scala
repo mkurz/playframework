@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db.evolutions
 
@@ -108,12 +108,12 @@ object Evolutions {
   def resourceName(db: String, revision: Int): String = s"evolutions/${db}/${revision}.sql"
 
   /**
-   * Apply pending evolutions for the given DB.
+   * Apply pending evolutions for the given database.
    */
+  @deprecated("Inject or create an instance of EvolutionsApi and use EvolutionsApi#applyFor", "2.6.0")
   def applyFor(dbName: String, path: java.io.File = new java.io.File("."), autocommit: Boolean = true, schema: String = ""): Unit = {
-    val evolutions = Play.current.injector.instanceOf[EvolutionsApi]
-    val scripts = evolutions.scripts(dbName, new EnvironmentEvolutionsReader(Environment.simple(path = path)), schema)
-    evolutions.evolve(dbName, scripts, autocommit, schema)
+    val evolutionsApi = Play.current.injector.instanceOf[EvolutionsApi]
+    evolutionsApi.applyFor(dbName, path, autocommit, schema)
   }
 
   /**
@@ -122,7 +122,8 @@ object Evolutions {
   def updateEvolutionScript(db: String = "default", revision: Int = 1, comment: String = "Generated", ups: String, downs: String)(implicit environment: Environment) {
     val evolutions = environment.getFile(fileName(db, revision))
     Files.createDirectory(environment.getFile(directoryName(db)).toPath)
-    writeFileIfChanged(evolutions,
+    writeFileIfChanged(
+      evolutions,
       """|# --- %s
          |
          |# --- !Ups
@@ -135,7 +136,7 @@ object Evolutions {
   }
 
   private def writeFileIfChanged(path: File, content: String): Unit = {
-    if (content != PlayIO.readFileAsString(path)) {
+    if (content != PlayIO.readFileAsString(path.toPath)) {
       writeFile(path, content)
     }
   }
@@ -238,9 +239,8 @@ object Evolutions {
  */
 object OfflineEvolutions {
 
-  private val logger = Logger(this.getClass)
-
-  private def isTest: Boolean = Play.privateMaybeApplication.exists(_.mode == Mode.Test)
+  // Get a logger that doesn't log in tests
+  private val nonTestLogger = Logger(this.getClass).forMode(Mode.Dev, Mode.Prod)
 
   private def getEvolutions(appPath: File, classloader: ClassLoader, dbApi: DBApi): EvolutionsComponents = {
     val _dbApi = dbApi
@@ -265,9 +265,7 @@ object OfflineEvolutions {
   def applyScript(appPath: File, classloader: ClassLoader, dbApi: DBApi, dbName: String, autocommit: Boolean = true, schema: String = ""): Unit = {
     val evolutions = getEvolutions(appPath, classloader, dbApi)
     val scripts = evolutions.evolutionsApi.scripts(dbName, evolutions.evolutionsReader, schema)
-    if (!isTest) {
-      logger.warn("Applying evolution scripts for database '" + dbName + "':\n\n" + Evolutions.toHumanReadableScript(scripts))
-    }
+    nonTestLogger.warn("Applying evolution scripts for database '" + dbName + "':\n\n" + Evolutions.toHumanReadableScript(scripts))
     evolutions.evolutionsApi.evolve(dbName, scripts, autocommit, schema)
   }
 
@@ -283,9 +281,7 @@ object OfflineEvolutions {
    */
   def resolve(appPath: File, classloader: ClassLoader, dbApi: DBApi, dbName: String, revision: Int, schema: String = ""): Unit = {
     val evolutions = getEvolutions(appPath, classloader, dbApi)
-    if (!isTest) {
-      logger.warn("Resolving evolution [" + revision + "] for database '" + dbName + "'")
-    }
+    nonTestLogger.warn("Resolving evolution [" + revision + "] for database '" + dbName + "'")
     evolutions.evolutionsApi.resolve(dbName, revision, schema)
   }
 

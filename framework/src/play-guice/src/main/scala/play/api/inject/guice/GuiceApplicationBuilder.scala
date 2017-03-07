@@ -1,17 +1,16 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.inject.guice
 
-import javax.inject.{ Provider, Inject }
-
-import org.slf4j.ILoggerFactory
+import javax.inject.{ Inject, Provider, Singleton }
 
 import com.google.inject.{ Module => GuiceModule }
-import play.api.mvc.{ RequestHeader, Handler }
-import play.api.routing.Router
+import org.slf4j.ILoggerFactory
 import play.api._
 import play.api.inject.{ RoutesProvider, bind }
+import play.api.mvc.{ Handler, RequestHeader }
+import play.api.routing.Router
 import play.core.{ DefaultWebCommands, WebCommands }
 
 import scala.runtime.AbstractPartialFunction
@@ -29,11 +28,17 @@ final case class GuiceApplicationBuilder(
   eagerly: Boolean = false,
   loadConfiguration: Environment => Configuration = Configuration.load,
   loadModules: (Environment, Configuration) => Seq[GuiceableModule] = GuiceableModule.loadModules) extends GuiceBuilder[GuiceApplicationBuilder](
-    environment, configuration, modules, overrides, disabled, binderOptions, eagerly
-  ) {
+  environment, configuration, modules, overrides, disabled, binderOptions, eagerly
+) {
 
   // extra constructor for creating from Java
   def this() = this(environment = Environment.simple())
+
+  /**
+   * Sets the configuration key to enable/disable global application state
+   */
+  def globalApp(enabled: Boolean): GuiceApplicationBuilder =
+    configure(Play.GlobalAppConfigKey -> enabled)
 
   /**
    * Set the initial configuration loader.
@@ -63,11 +68,14 @@ final case class GuiceApplicationBuilder(
     load((env, conf) => modules)
 
   /**
-    * Override the router with a fake router having the given routes, before falling back to the default router
-    */
-  def routes(routes: PartialFunction[(String, String), Handler]): GuiceApplicationBuilder =
+   * Override the router with a fake router having the given routes, before falling back to the default router
+   */
+  def appRoutes(routes: Application => PartialFunction[(String, String), Handler]): GuiceApplicationBuilder =
     bindings(bind[FakeRouterConfig] to FakeRouterConfig(routes))
-      .overrides(bind[Router].toProvider[FakeRouterProvider])
+      .overrides(bind[Router].toProvider[FakeRouterProvider].in[Singleton])
+
+  def routes(routesFunc: PartialFunction[(String, String), Handler]): GuiceApplicationBuilder =
+    appRoutes(_ => routesFunc)
 
   /**
    * Override the router with the given router.
@@ -111,9 +119,9 @@ final case class GuiceApplicationBuilder(
    */
   def configureLoggerFactory(configuration: Configuration): ILoggerFactory = {
     val loggerFactory: ILoggerFactory = LoggerConfigurator(environment.classLoader).map { lc =>
-        lc.configure(environment, configuration, Map.empty)
-        lc.loggerFactory
-      }.getOrElse(org.slf4j.LoggerFactory.getILoggerFactory)
+      lc.configure(environment, configuration, Map.empty)
+      lc.loggerFactory
+    }.getOrElse(org.slf4j.LoggerFactory.getILoggerFactory)
 
     if (shouldDisplayLoggerDeprecationMessage(configuration)) {
       val logger = loggerFactory.getLogger("application")
@@ -174,8 +182,9 @@ final case class GuiceApplicationBuilder(
       values.exists {
         case (_, value: String) if deprecatedValues.contains(value) =>
           true
-        case (_, value: java.util.Map[String, AnyRef]) =>
-          hasDeprecatedValue(value.asScala)
+        case (_, value: java.util.Map[_, _]) =>
+          val v = value.asInstanceOf[java.util.Map[String, AnyRef]]
+          hasDeprecatedValue(v.asScala)
         case _ =>
           false
       }
@@ -185,8 +194,9 @@ final case class GuiceApplicationBuilder(
       appConfiguration.underlying.getAnyRef("logger") match {
         case value: String =>
           hasDeprecatedValue(mutable.Map("logger" -> value))
-        case value: java.util.Map[String, AnyRef] =>
-          hasDeprecatedValue(value.asScala)
+        case value: java.util.Map[_, _] =>
+          val v = value.asInstanceOf[java.util.Map[String, AnyRef]]
+          hasDeprecatedValue(v.asScala)
         case _ =>
           false
       }
@@ -201,9 +211,8 @@ private class AdditionalRouterProvider(additional: Router) extends Provider[Rout
   lazy val get = Router.from(additional.routes.orElse(fallback.get.routes))
 }
 
-
 private class FakeRoutes(
-    injected: PartialFunction[(String, String), Handler], fallback: Router) extends Router {
+    injected: => PartialFunction[(String, String), Handler], fallback: Router) extends Router {
   def documentation = fallback.documentation
   // Use withRoutes first, then delegate to the parentRoutes if no route is defined
   val routes = new AbstractPartialFunction[RequestHeader, Handler] {
@@ -220,8 +229,8 @@ private class FakeRoutes(
   }
 }
 
-private case class FakeRouterConfig(withRoutes: PartialFunction[(String, String), Handler])
+private case class FakeRouterConfig(withRoutes: Application => PartialFunction[(String, String), Handler])
 
-private class FakeRouterProvider @Inject() (config: FakeRouterConfig, parent: RoutesProvider) extends Provider[Router] {
-  lazy val get: Router = new FakeRoutes(config.withRoutes, parent.get)
+private class FakeRouterProvider @Inject() (config: FakeRouterConfig, parent: RoutesProvider, appProvider: Provider[Application]) extends Provider[Router] {
+  def get: Router = new FakeRoutes(config.withRoutes(appProvider.get), parent.get)
 }

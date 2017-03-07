@@ -1,9 +1,15 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
-import play.api.http.{ FlashConfiguration, HttpConfiguration, SessionConfiguration }
+import javax.inject.Inject
+
+import play.api.http.{ FlashConfiguration, HttpConfiguration, SecretConfiguration, SessionConfiguration }
+import play.api.libs.crypto.{ CookieSigner, CookieSignerProvider }
+import play.mvc.Http
+
+import scala.collection.JavaConverters._
 
 /**
  * HTTP Flash scope.
@@ -56,27 +62,42 @@ case class Flash(data: Map[String, String] = Map.empty[String, String]) {
    */
   def apply(key: String) = data(key)
 
+  lazy val asJava: Http.Flash = new Http.Flash(data.asJava)
 }
 
 /**
  * Helper utilities to manage the Flash cookie.
  */
-object Flash extends CookieBaker[Flash] {
-  private def config: FlashConfiguration = HttpConfiguration.current.flash
-  private def sessionConfig: SessionConfiguration = HttpConfiguration.current.session
+trait FlashCookieBaker extends CookieBaker[Flash] {
+
+  def config: FlashConfiguration
+  def sessionConfig: SessionConfiguration
 
   def COOKIE_NAME = config.cookieName
 
-  override def path = HttpConfiguration.current.context
+  lazy val emptyCookie = new Flash
+
+  override def path = config.path
   override def secure = config.secure
   override def httpOnly = config.httpOnly
   override def domain = sessionConfig.domain
-  override def cookieSigner = play.api.libs.Crypto.crypto
-
-  val emptyCookie = new Flash
 
   def deserialize(data: Map[String, String]) = new Flash(data)
 
   def serialize(flash: Flash) = flash.data
 
+}
+
+class DefaultFlashCookieBaker @Inject() (val config: FlashConfiguration, val sessionConfig: SessionConfiguration, val cookieSigner: CookieSigner)
+    extends FlashCookieBaker {
+  def this() = this(FlashConfiguration(), SessionConfiguration(), new CookieSignerProvider(SecretConfiguration()).get)
+}
+
+@deprecated("Inject [[play.api.mvc.FlashCookieBaker]] instead", "2.6.0")
+object Flash extends FlashCookieBaker {
+  def config = HttpConfiguration.current.flash
+  def sessionConfig = HttpConfiguration.current.session
+  def fromJavaFlash(javaFlash: play.mvc.Http.Flash): Flash = new Flash(javaFlash.asScala.toMap)
+  override def path = HttpConfiguration.current.context
+  override def cookieSigner = play.api.libs.Crypto.cookieSigner
 }

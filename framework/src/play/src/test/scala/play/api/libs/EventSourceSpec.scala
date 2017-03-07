@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.libs
 
@@ -8,7 +8,7 @@ import org.specs2.mutable.Specification
 import play.api.http.ContentTypes
 import play.api.mvc.Results
 
-object EventSourceSpec extends Specification {
+class EventSourceSpec extends Specification {
 
   import EventSource.Event
 

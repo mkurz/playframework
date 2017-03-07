@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.routes.compiler.templates
 
 import org.specs2.mutable.Specification
 import play.routes.compiler._
 
-object TemplatesSpec extends Specification {
+class TemplatesSpec extends Specification {
   "javascript reverse routes" should {
     "collect parameter names with index appended" in {
       val reverseParams: Seq[(Parameter, Int)] = reverseParametersJavascript(Seq(

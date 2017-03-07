@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.routes.compiler
 
@@ -8,7 +8,7 @@ import java.io.File
 import org.specs2.execute.Result
 import org.specs2.mutable.Specification
 
-object RoutesFileParserSpec extends Specification {
+class RoutesFileParserSpec extends Specification {
 
   "route file parser" should {
 

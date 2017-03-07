@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package scalaguide.dependencyinjection
 
 import play.api.inject.guice.GuiceApplicationBuilder
 import play.api.test._
 
-object RuntimeDependencyInjection extends PlaySpecification {
+class RuntimeDependencyInjection extends PlaySpecification {
 
   "Play's runtime dependency injection support" should {
     "support constructor injection" in new WithApplication() {

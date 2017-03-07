@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package com.typesafe.play.docs.sbtplugin
 
@@ -32,7 +32,8 @@ object PlayDocsValidation {
    *
    * This is the main markdown report for validating markdown docs.
    */
-  case class MarkdownRefReport(markdownFiles: Seq[File],
+  case class MarkdownRefReport(
+    markdownFiles: Seq[File],
     wikiLinks: Seq[LinkRef],
     resourceLinks: Seq[LinkRef],
     codeSamples: Seq[CodeSampleRef],
@@ -59,13 +60,15 @@ object PlayDocsValidation {
   case class CodeSample(source: String, segment: String,
     sourcePosition: Int, segmentPosition: Int)
 
-  case class TranslationReport(missingFiles: Seq[String],
+  case class TranslationReport(
+    missingFiles: Seq[String],
     introducedFiles: Seq[String],
     changedPathFiles: Seq[(String, String)],
     codeSampleIssues: Seq[TranslationCodeSamples],
     okFiles: Seq[String],
     total: Int)
-  case class TranslationCodeSamples(name: String,
+  case class TranslationCodeSamples(
+    name: String,
     missingCodeSamples: Seq[CodeSample],
     introducedCodeSamples: Seq[CodeSample],
     totalCodeSamples: Int)
@@ -233,9 +236,9 @@ object PlayDocsValidation {
   val generateUpstreamCodeSamplesTask = Def.task {
     docsJarFile.value match {
       case Some(jarFile) =>
-        import scala.collection.JavaConversions._
+        import scala.collection.JavaConverters._
         val jar = new JarFile(jarFile)
-        val parsedFiles = jar.entries().toIterator.collect {
+        val parsedFiles = jar.entries().asScala.collect {
           case entry if entry.getName.endsWith(".md") && entry.getName.startsWith("play/docs/content/manual") =>
             val fileName = entry.getName.stripPrefix("play/docs/content")
             val contents = IO.readStream(jar.getInputStream(entry))
@@ -388,14 +391,16 @@ object PlayDocsValidation {
       case link if !relativeLinkOk(link) => link
     }, "Bad relative link")
 
-    assertLinksNotMissing("Missing wiki resources test",
+    assertLinksNotMissing(
+      "Missing wiki resources test",
       report.resourceLinks.collect {
         case link if !fileExists(link.link) => link
       }, "Could not find resource")
 
     val (existing, nonExisting) = report.codeSamples.partition(sample => fileExists(sample.source))
 
-    assertLinksNotMissing("Missing source files test",
+    assertLinksNotMissing(
+      "Missing source files test",
       nonExisting.map(sample => LinkRef(sample.source, sample.file, sample.sourcePosition)),
       "Could not find source file")
 

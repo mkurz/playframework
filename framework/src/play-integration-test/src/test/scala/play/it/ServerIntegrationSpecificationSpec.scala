@@ -1,20 +1,20 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it
 
 import play.api.inject.guice.GuiceApplicationBuilder
-import play.api.mvc._
 import play.api.mvc.Results._
+import play.api.mvc._
 import play.api.test._
 
-object NettyServerIntegrationSpecificationSpec extends ServerIntegrationSpecificationSpec with NettyIntegrationSpecification {
+class NettyServerIntegrationSpecificationSpec extends ServerIntegrationSpecificationSpec with NettyIntegrationSpecification {
   override def isAkkaHttpServer = false
-  override def expectedServerTag = None
+  override def expectedServerTag = Some("netty")
 }
-object AkkaHttpServerIntegrationSpecificationSpec extends ServerIntegrationSpecificationSpec with AkkaHttpIntegrationSpecification {
+class AkkaHttpServerIntegrationSpecificationSpec extends ServerIntegrationSpecificationSpec with AkkaHttpIntegrationSpecification {
   override def isAkkaHttpServer = true
-  override def expectedServerTag = Some("akka-http")
+  override def expectedServerTag = None
 }
 
 /**
@@ -31,7 +31,7 @@ trait ServerIntegrationSpecificationSpec extends PlaySpecification
   "ServerIntegrationSpecification" should {
 
     val httpServerTagRoutes: PartialFunction[(String, String), Handler] = {
-      case ("GET", "/httpServerTag") => Action { implicit request =>
+      case ("GET", "/httpServerTag") => ActionBuilder.ignoringBody { implicit request =>
         val httpServer = request.tags.get("HTTP_SERVER")
         Ok(httpServer.toString)
       }

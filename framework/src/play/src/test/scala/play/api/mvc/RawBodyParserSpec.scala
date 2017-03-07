@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
@@ -7,20 +7,20 @@ import akka.util.ByteString
 import akka.stream.scaladsl.Source
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-
 import java.io.IOException
 
 import org.specs2.mutable.Specification
 import org.specs2.specification.AfterAll
-
-import play.api.http.ParserConfiguration
+import play.api.{ Configuration, Environment }
+import play.api.http.{ DefaultHttpErrorHandler, ParserConfiguration }
+import play.api.libs.Files.SingletonTemporaryFileCreator
 import play.core.test.FakeRequest
 
 import scala.concurrent.Future
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-object RawBodyParserSpec extends Specification with AfterAll {
+class RawBodyParserSpec extends Specification with AfterAll {
 
   implicit val system = ActorSystem("content-types-spec")
   implicit val materializer = ActorMaterializer()(system)
@@ -31,9 +31,11 @@ object RawBodyParserSpec extends Specification with AfterAll {
   }
 
   val config = ParserConfiguration()
-  val bodyParser = new BodyParsers {}
+  val errorHandler = new DefaultHttpErrorHandler(Environment.simple(), Configuration.empty)
+  val tempFileCreator = SingletonTemporaryFileCreator
+  val parse = PlayBodyParsers(config, errorHandler, materializer, tempFileCreator)
 
-  def parse(body: ByteString, memoryThreshold: Int = config.maxMemoryBuffer, maxLength: Long = config.maxDiskBuffer)(parser: BodyParser[RawBuffer] = bodyParser.parse.raw(memoryThreshold, maxLength)): Either[Result, RawBuffer] = {
+  def parse(body: ByteString, memoryThreshold: Int = config.maxMemoryBuffer, maxLength: Long = config.maxDiskBuffer)(parser: BodyParser[RawBuffer] = parse.raw(memoryThreshold, maxLength)): Either[Result, RawBuffer] = {
     val request = FakeRequest(method = "GET", "/x")
 
     Await.result(parser(request).run(Source.single(body)), Duration.Inf)
@@ -54,7 +56,7 @@ object RawBodyParserSpec extends Specification with AfterAll {
       "using a future" in {
         import scala.concurrent.ExecutionContext.Implicits.global
 
-        parse(body)(bodyParser.parse.flatten(Future.successful(bodyParser.parse.raw()))) must beRight.like {
+        parse(body)(parse.flatten(Future.successful(parse.raw()))) must beRight.like {
           case rawBuffer => rawBuffer.asBytes() must beSome.like {
             case outBytes =>
               outBytes mustEqual body

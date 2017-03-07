@@ -1,10 +1,14 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api
 
+import play.api.i18n.{ I18nComponents, I18nModule }
 import play.core.{ DefaultWebCommands, SourceMapper, WebCommands }
 import play.utils.Reflect
+import play.api.inject.{ DefaultApplicationLifecycle, Injector, NewInstanceInjector, SimpleInjector }
+import play.api.mvc.{ ControllerComponents, DefaultControllerComponents }
+import play.core.j.{ DefaultJavaContextComponents, JavaHelpers }
 
 /**
  * Loads an application.  This is responsible for instantiating an application given a context.
@@ -16,8 +20,9 @@ import play.utils.Reflect
  * During dev mode, an ApplicationLoader will be instantiated once, and called once, each time the application is
  * reloaded. In prod mode, the ApplicationLoader will be instantiated and called once when the application is started.
  *
- * Out of the box Play provides a Guice module that defines a Java and Scala default implementation based on Guice.
- * These can be used simply by depending on the play-guice or play-java-guice modules.
+ * Out of the box Play provides a Guice module that defines a Java and Scala default implementation based on Guice,
+ * as well as various helpers like GuiceApplicationBuilder.  This can be used simply by adding the "PlayImport.guice"
+ * dependency in build.sbt.
  *
  * A custom application loader can be configured using the `play.application.loader` configuration property.
  * Implementations must define a no-arg constructor.
@@ -33,11 +38,13 @@ trait ApplicationLoader {
 
 object ApplicationLoader {
 
+  import play.api.inject.DefaultApplicationLifecycle
+
   // Method to call if we cannot find a configured ApplicationLoader
   private def loaderNotFound(): Nothing = {
     sys.error("No application loader is configured. Please configure an application loader either using the " +
-      "play.application.loader configuration property, or by depending on a module that configures one, " +
-      "for example by adding the play-guice dependency.")
+      "play.application.loader configuration property, or by depending on a module that configures one. " +
+      "You can add the Guice support module by adding \"libraryDependencies += guice\" to your build.sbt.")
   }
 
   private[play] final class NoApplicationLoader extends ApplicationLoader {
@@ -54,7 +61,7 @@ object ApplicationLoader {
    *                             configuration used by the application, as the ApplicationLoader may, through it's own
    *                             mechanisms, modify it or completely ignore it.
    */
-  final case class Context(environment: Environment, sourceMapper: Option[SourceMapper], webCommands: WebCommands, initialConfiguration: Configuration)
+  final case class Context(environment: Environment, sourceMapper: Option[SourceMapper], webCommands: WebCommands, initialConfiguration: Configuration, lifecycle: DefaultApplicationLifecycle)
 
   /**
    * Locate and instantiate the ApplicationLoader.
@@ -68,23 +75,23 @@ object ApplicationLoader {
     Reflect.configuredClass[ApplicationLoader, play.ApplicationLoader, NoApplicationLoader](
       context.environment, context.initialConfiguration, LoaderKey, classOf[NoApplicationLoader].getName
     ) match {
-        case None =>
-          loaderNotFound()
-        case Some(Left(scalaClass)) =>
-          scalaClass.newInstance
-        case Some(Right(javaClass)) =>
-          val javaApplicationLoader: play.ApplicationLoader = javaClass.newInstance
-          // Create an adapter from a Java to a Scala ApplicationLoader. This class is
-          // effectively anonymous, but let's give it a name to make debugging easier.
-          class JavaApplicationLoaderAdapter extends ApplicationLoader {
-            override def load(context: ApplicationLoader.Context): Application = {
-              val javaContext = new play.ApplicationLoader.Context(context)
-              val javaApplication = javaApplicationLoader.load(javaContext)
-              javaApplication.getWrappedApplication
-            }
+      case None =>
+        loaderNotFound()
+      case Some(Left(scalaClass)) =>
+        scalaClass.newInstance
+      case Some(Right(javaClass)) =>
+        val javaApplicationLoader: play.ApplicationLoader = javaClass.newInstance
+        // Create an adapter from a Java to a Scala ApplicationLoader. This class is
+        // effectively anonymous, but let's give it a name to make debugging easier.
+        class JavaApplicationLoaderAdapter extends ApplicationLoader {
+          override def load(context: ApplicationLoader.Context): Application = {
+            val javaContext = new play.ApplicationLoader.Context(context)
+            val javaApplication = javaApplicationLoader.load(javaContext)
+            javaApplication.getWrappedApplication
           }
-          new JavaApplicationLoaderAdapter
-      }
+        }
+        new JavaApplicationLoaderAdapter
+    }
   }
 
   /**
@@ -99,12 +106,14 @@ object ApplicationLoader {
    *                        into the application.
    * @param sourceMapper An optional source mapper.
    */
-  def createContext(environment: Environment,
+  def createContext(
+    environment: Environment,
     initialSettings: Map[String, AnyRef] = Map.empty[String, AnyRef],
     sourceMapper: Option[SourceMapper] = None,
-    webCommands: WebCommands = new DefaultWebCommands) = {
+    webCommands: WebCommands = new DefaultWebCommands,
+    lifecycle: DefaultApplicationLifecycle = new DefaultApplicationLifecycle()) = {
     val configuration = Configuration.load(environment, initialSettings)
-    Context(environment, sourceMapper, webCommands, configuration)
+    Context(environment, sourceMapper, webCommands, configuration, lifecycle)
   }
 
 }
@@ -112,10 +121,18 @@ object ApplicationLoader {
 /**
  * Helper that provides all the built in components dependencies from the application loader context
  */
-abstract class BuiltInComponentsFromContext(context: ApplicationLoader.Context) extends BuiltInComponents {
+abstract class BuiltInComponentsFromContext(context: ApplicationLoader.Context) extends BuiltInComponents with I18nComponents {
   lazy val environment = context.environment
   lazy val sourceMapper = context.sourceMapper
   lazy val webCommands = context.webCommands
   lazy val configuration = context.initialConfiguration
+  lazy val applicationLifecycle: DefaultApplicationLifecycle = context.lifecycle
+
+  lazy val controllerComponents: ControllerComponents = DefaultControllerComponents(
+    defaultActionBuilder, playBodyParsers, messagesApi, langs, fileMimeTypes, executionContext
+  )
+
+  override lazy val injector: Injector = new SimpleInjector(NewInstanceInjector) + router + cookieSigner +
+    csrfTokenSigner + httpConfiguration + tempFileCreator + messagesApi + langs + javaContextComponents + fileMimeTypes
 }
 

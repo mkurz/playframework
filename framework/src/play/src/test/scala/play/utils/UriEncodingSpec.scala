@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.utils
 
@@ -8,7 +8,7 @@ import org.specs2.mutable._
 /**
  * Tests for the UriEncoding object.
  */
-object UriEncodingSpec extends Specification {
+class UriEncodingSpec extends Specification {
   import UriEncoding._
 
   sealed trait EncodingResult

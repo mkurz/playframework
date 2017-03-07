@@ -1,17 +1,18 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package scalaguide.dependencyinjection
 
 import java.io.File
 
 import org.specs2.mutable.Specification
+import _root_.controllers.AssetsMetadata
 
-object CompileTimeDependencyInjection extends Specification {
+class CompileTimeDependencyInjection extends Specification {
 
   import play.api._
 
-  val environment = Environment(new File("."), CompileTimeDependencyInjection.getClass.getClassLoader, Mode.Test)
+  val environment = Environment(new File("."), this.getClass.getClassLoader, Mode.Test)
 
   "compile time dependency injection" should {
     "allow creating an application with the built in components from context" in {
@@ -113,13 +114,11 @@ class MyApplicationLoader extends ApplicationLoader {
   }
 }
 
-class MyComponents(context: Context) extends BuiltInComponentsFromContext(context) {
-
-  lazy val router = new Routes(httpErrorHandler, applicationController, barRoutes, assets)
-
+class MyComponents(context: Context) extends BuiltInComponentsFromContext(context) with controllers.AssetsComponents {
   lazy val barRoutes = new bar.Routes(httpErrorHandler)
   lazy val applicationController = new controllers.Application()
-  lazy val assets = new controllers.Assets(httpErrorHandler)
+
+  lazy val router = new Routes(httpErrorHandler, applicationController, barRoutes, assets)
 }
 //#routers
 
@@ -135,5 +134,9 @@ package controllers {
     def foo = Action(Ok)
   }
 
-  class Assets(errorHandler: HttpErrorHandler) extends _root_.controllers.AssetsBuilder(errorHandler)
+  trait AssetsComponents extends _root_.controllers.AssetsComponents {
+    override lazy val assets = new controllers.Assets(httpErrorHandler, assetsMetadata)
+  }
+
+  class Assets(errorHandler: HttpErrorHandler, assetsMetadata: AssetsMetadata) extends _root_.controllers.Assets(errorHandler, assetsMetadata)
 }

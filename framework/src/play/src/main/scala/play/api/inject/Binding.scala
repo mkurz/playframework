@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.inject
 
@@ -9,7 +9,6 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 
 import play.inject.SourceProvider
-
 
 /**
  * A binding.

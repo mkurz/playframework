@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.http.parsing
 
@@ -17,7 +17,7 @@ import play.api.test.{ FakeRequest, PlaySpecification }
 import org.specs2.ScalaCheck
 import org.scalacheck.{ Arbitrary, Gen }
 
-object BodyParserSpec extends PlaySpecification with ScalaCheck {
+class BodyParserSpec extends PlaySpecification with ScalaCheck {
 
   def run[A](bodyParser: BodyParser[A]) = {
     import scala.concurrent.ExecutionContext.Implicits.global

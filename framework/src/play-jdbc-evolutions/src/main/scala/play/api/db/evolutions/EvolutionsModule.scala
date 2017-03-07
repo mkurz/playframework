@@ -1,28 +1,24 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db.evolutions
 
 import javax.inject._
 
 import play.api.db.DBApi
-import play.api.inject.{ Injector, Module }
+import play.api.inject._
 import play.api.{ Configuration, Environment }
 import play.core.WebCommands
 
 /**
  * Default module for evolutions API.
  */
-class EvolutionsModule extends Module {
-  def bindings(environment: Environment, configuration: Configuration) = {
-    Seq(
-      bind[EvolutionsConfig].toProvider[DefaultEvolutionsConfigParser],
-      bind[EvolutionsReader].to[EnvironmentEvolutionsReader],
-      bind[EvolutionsApi].to[DefaultEvolutionsApi],
-      bind[ApplicationEvolutions].toProvider[ApplicationEvolutionsProvider].eagerly
-    )
-  }
-}
+class EvolutionsModule extends SimpleModule(
+  bind[EvolutionsConfig].toProvider[DefaultEvolutionsConfigParser],
+  bind[EvolutionsReader].to[EnvironmentEvolutionsReader],
+  bind[EvolutionsApi].to[DefaultEvolutionsApi],
+  bind[ApplicationEvolutions].toProvider[ApplicationEvolutionsProvider].eagerly
+)
 
 /**
  * Components for default implementation of the evolutions API.

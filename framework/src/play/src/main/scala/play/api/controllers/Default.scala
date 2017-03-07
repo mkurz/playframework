@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package controllers
 
@@ -7,6 +7,7 @@ import javax.inject.Inject
 
 import play.api.mvc._
 
+@deprecated("Use Default class instead", "2.6.0")
 object Default extends Default
 
 /**
@@ -21,6 +22,8 @@ object Default extends Default
  * }}}
  */
 class Default @Inject() () extends Controller {
+
+  private val Action = new ActionBuilder.IgnoringBody()(controllers.Execution.trampoline)
 
   /**
    * Returns a 501 NotImplemented response.
@@ -45,7 +48,7 @@ class Default @Inject() () extends Controller {
   }
 
   /**
-   * Returns a 302 Redirect response.
+   * Returns a 303 SeeOther response.
    *
    * Example:
    * {{{

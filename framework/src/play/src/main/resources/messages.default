@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+# Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
 #
 
 # Default messages
@@ -43,8 +43,6 @@ error.uuid=Valid UUID required
 error.expected.date=Date value expected
 error.expected.date.isoformat=Iso date value expected
 error.expected.time=Time value expected
-error.expected.jodadate.format=Joda date value expected
-error.expected.jodatime.format=Joda time value expected
 error.expected.jsarray=Array value expected
 error.expected.jsboolean=Boolean value expected
 error.expected.jsnumber=Number value expected

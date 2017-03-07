@@ -1,19 +1,22 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.routing
 
 import java.util.Optional
-import java.util.concurrent.{CompletableFuture, CompletionStage}
+import java.util.concurrent.{ CompletableFuture, CompletionStage }
 
 import akka.stream.scaladsl.Flow
 import org.apache.commons.lang3.reflect.MethodUtils
+import play.api.http.ActionCompositionConfiguration
 import play.api.mvc._
+import play.api.routing.HandlerDef
 import play.core.j
-import play.core.j.{JavaHelpers, JavaActionAnnotations, JavaHandler, JavaHandlerComponents}
-import play.mvc.Http.{Context, RequestBody}
+import play.core.j._
+import play.i18n.{ Langs, MessagesApi }
+import play.mvc.Http.{ Context, RequestBody }
 
-import scala.compat.java8.{FutureConverters, OptionConverters}
+import scala.compat.java8.{ FutureConverters, OptionConverters }
 import scala.util.control.NonFatal
 
 /**
@@ -27,28 +30,6 @@ trait HandlerInvoker[-T] {
    * Play to service the request.
    */
   def call(call: => T): Handler
-}
-
-/**
- * An invoker that wraps another invoker, ensuring the request is tagged appropriately.
- */
-private class TaggingInvoker[-A](underlyingInvoker: HandlerInvoker[A], handlerDef: HandlerDef) extends HandlerInvoker[A] {
-  import HandlerInvokerFactory._
-  val cachedHandlerTags = handlerTags(handlerDef)
-  def call(call: => A): Handler = {
-    val handler = underlyingInvoker.call(call)
-    // All JavaAction's should already be tagged
-    handler match {
-      case alreadyTagged: RequestTaggingHandler => alreadyTagged
-      case action: EssentialAction => new EssentialAction with RequestTaggingHandler {
-        def apply(rh: RequestHeader) = action(rh)
-        def tagRequest(rh: RequestHeader) = taggedRequest(rh, cachedHandlerTags)
-      }
-      case ws: WebSocket =>
-        WebSocket(rh => ws(taggedRequest(rh, cachedHandlerTags)))
-      case other => other
-    }
-  }
 }
 
 /**
@@ -70,19 +51,6 @@ trait HandlerInvokerFactory[-T] {
 object HandlerInvokerFactory {
 
   import play.mvc.{ Result => JResult, WebSocket => JWebSocket }
-
-  private[routing] def handlerTags(handlerDef: HandlerDef): Map[String, String] = Map(
-    play.api.routing.Router.Tags.RoutePattern -> handlerDef.path,
-    play.api.routing.Router.Tags.RouteVerb -> handlerDef.verb,
-    play.api.routing.Router.Tags.RouteController -> handlerDef.controller,
-    play.api.routing.Router.Tags.RouteActionMethod -> handlerDef.method,
-    play.api.routing.Router.Tags.RouteComments -> handlerDef.comments
-  )
-
-  private[routing] def taggedRequest(rh: RequestHeader, tags: Map[String, String]): RequestHeader = {
-    val newTags = if (rh.tags.isEmpty) tags else rh.tags ++ tags
-    rh.copy(tags = newTags)
-  }
 
   /**
    * Create a `HandlerInvokerFactory` for a call that already produces a
@@ -117,29 +85,42 @@ object HandlerInvokerFactory {
    * tags and annotations.
    */
   private abstract class JavaActionInvokerFactory[A] extends HandlerInvokerFactory[A] {
-    def createInvoker(fakeCall: => A, handlerDef: HandlerDef): HandlerInvoker[A] = new HandlerInvoker[A] {
-      val cachedHandlerTags = handlerTags(handlerDef)
-      val cachedAnnotations = {
-        val controller = loadJavaControllerClass(handlerDef)
-        val method = MethodUtils.getMatchingAccessibleMethod(controller, handlerDef.method, handlerDef.parameterTypes: _*)
-        new JavaActionAnnotations(controller, method)
+
+    override def createInvoker(fakeCall: => A, handlerDef: HandlerDef): HandlerInvoker[A] = new HandlerInvoker[A] {
+      // Cache annotations, initializing on first use
+      // (It's OK that this is unsynchronized since the initialization should be idempotent.)
+      private var _annotations: JavaActionAnnotations = null
+      def cachedAnnotations(config: ActionCompositionConfiguration) = {
+        if (_annotations == null) {
+          val controller = loadJavaControllerClass(handlerDef)
+          val method = MethodUtils.getMatchingAccessibleMethod(controller, handlerDef.method, handlerDef.parameterTypes: _*)
+          _annotations = new JavaActionAnnotations(controller, method, config)
+        }
+        _annotations
       }
-      def call(call: => A): Handler = new JavaHandler {
-        def withComponents(components: JavaHandlerComponents) = new play.core.j.JavaAction(components) with RequestTaggingHandler {
-          val annotations = cachedAnnotations
-          val parser = {
-            val javaParser = components.getBodyParser(cachedAnnotations.parser)
-            javaBodyParserToScala(javaParser)
+
+      override def call(call: => A): Handler = new JavaHandler {
+        def withComponents(handlerComponents: JavaHandlerComponents): Handler = {
+          new play.core.j.JavaAction(handlerComponents) {
+            override val annotations = cachedAnnotations(handlerComponents.httpConfiguration.actionComposition)
+            override val parser = {
+              val javaParser = handlerComponents.getBodyParser(annotations.parser)
+              javaBodyParserToScala(javaParser)
+            }
+            override def invocation: CompletionStage[JResult] = resultCall(call)
           }
-          def invocation: CompletionStage[JResult] = resultCall(call)
-          def tagRequest(rh: RequestHeader) = taggedRequest(rh, cachedHandlerTags)
         }
       }
     }
+
+    /**
+     * The core logic for this Java action.
+     */
     def resultCall(call: => A): CompletionStage[JResult]
   }
 
   private[play] def javaBodyParserToScala(parser: play.mvc.BodyParser[_]): BodyParser[RequestBody] = BodyParser { request =>
+    import scala.language.existentials
     val accumulator = parser.apply(new play.core.j.RequestHeaderImpl(request)).asScala()
     import play.core.Execution.Implicits.trampoline
     accumulator.map { javaEither =>
@@ -164,49 +145,50 @@ object HandlerInvokerFactory {
   private abstract class JavaWebSocketInvokerFactory[A, B] extends HandlerInvokerFactory[A] {
     def webSocketCall(call: => A): WebSocket
     def createInvoker(fakeCall: => A, handlerDef: HandlerDef): HandlerInvoker[A] = new HandlerInvoker[A] {
-      val cachedHandlerTags = handlerTags(handlerDef)
-      def call(call: => A): WebSocket = webSocketCall(call)
+      override def call(call: => A): Handler = webSocketCall(call)
     }
   }
 
   implicit def javaWebSocket: HandlerInvokerFactory[JWebSocket] = new HandlerInvokerFactory[JWebSocket] {
     import play.api.http.websocket._
     import play.core.Execution.Implicits.trampoline
-    import play.http.websocket.{Message => JMessage}
+    import play.http.websocket.{ Message => JMessage }
 
     def createInvoker(fakeCall: => JWebSocket, handlerDef: HandlerDef) = new HandlerInvoker[JWebSocket] {
-      def call(call: => JWebSocket) = WebSocket.acceptOrResult[Message, Message] { request =>
+      def call(call: => JWebSocket) = new JavaHandler {
+        def withComponents(handlerComponents: JavaHandlerComponents): WebSocket = {
+          WebSocket.acceptOrResult[Message, Message] { request =>
+            val javaContext = JavaHelpers.createJavaContext(request, handlerComponents.contextComponents)
 
-        val javaContext = JavaHelpers.createJavaContext(request)
+            val callWithContext = {
+              try {
+                Context.current.set(javaContext)
+                FutureConverters.toScala(call(new j.RequestHeaderImpl(request)))
+              } finally {
+                Context.current.remove()
+              }
+            }
 
-        val callWithContext = {
-          try {
-            Context.current.set(javaContext)
-            FutureConverters.toScala(call(new j.RequestHeaderImpl(request)))
-          } finally {
-            Context.current.remove()
+            callWithContext.map { resultOrFlow =>
+              if (resultOrFlow.left.isPresent) {
+                Left(resultOrFlow.left.get.asScala())
+              } else {
+                Right(Flow[Message].map {
+                  case TextMessage(text) => new JMessage.Text(text)
+                  case BinaryMessage(data) => new JMessage.Binary(data)
+                  case PingMessage(data) => new JMessage.Ping(data)
+                  case PongMessage(data) => new JMessage.Pong(data)
+                  case CloseMessage(code, reason) => new JMessage.Close(OptionConverters.toJava(code).asInstanceOf[Optional[Integer]], reason)
+                }.via(resultOrFlow.right.get.asScala).map {
+                  case text: JMessage.Text => TextMessage(text.data)
+                  case binary: JMessage.Binary => BinaryMessage(binary.data)
+                  case ping: JMessage.Ping => PingMessage(ping.data)
+                  case pong: JMessage.Pong => PongMessage(pong.data)
+                  case close: JMessage.Close => CloseMessage(OptionConverters.toScala(close.code).asInstanceOf[Option[Int]], close.reason)
+                })
+              }
+            }
           }
-        }
-
-        callWithContext.map { resultOrFlow =>
-          if (resultOrFlow.left.isPresent) {
-            Left(resultOrFlow.left.get.asScala())
-          } else {
-            Right(Flow[Message].map {
-              case TextMessage(text) => new JMessage.Text(text)
-              case BinaryMessage(data) => new JMessage.Binary(data)
-              case PingMessage(data) => new JMessage.Ping(data)
-              case PongMessage(data) => new JMessage.Pong(data)
-              case CloseMessage(code, reason) => new JMessage.Close(OptionConverters.toJava(code).asInstanceOf[Optional[Integer]], reason)
-            }.via(resultOrFlow.right.get.asScala).map {
-              case text: JMessage.Text => TextMessage(text.data)
-              case binary: JMessage.Binary => BinaryMessage(binary.data)
-              case ping: JMessage.Ping => PingMessage(ping.data)
-              case pong: JMessage.Pong => PongMessage(pong.data)
-              case close: JMessage.Close => CloseMessage(OptionConverters.toScala(close.code).asInstanceOf[Option[Int]], close.reason)
-            })
-          }
-
         }
       }
     }

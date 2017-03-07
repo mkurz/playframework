@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
 import java.util.UUID
 import org.specs2.mutable._
 
-object BindersSpec extends Specification {
+class BindersSpec extends Specification {
 
   val uuid = UUID.randomUUID
 

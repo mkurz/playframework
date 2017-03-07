@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.server.ssl
 
@@ -11,7 +11,7 @@ import play.core.ApplicationProvider
 
 /**
  * This singleton object looks for a class of {{play.server.api.SSLEngineProvider}} or {{play.server.SSLEngineProvider}}
- * in the system property <pre>play.http.sslengineprovider</pre>.  if there is no instance found, it uses
+ * in the system property <pre>play.server.https.engineProvider</pre>.  if there is no instance found, it uses
  * DefaultSSLEngineProvider.
  *
  * If the class of {{SSLEngineProvider}} defined has a constructor with {{play.core.ApplicationProvider}} (for Scala) or
@@ -39,7 +39,8 @@ object ServerSSLEngine {
     }
   }
 
-  private def createJavaSSLEngineProvider(providerClass: Class[JavaSSLEngineProvider],
+  private def createJavaSSLEngineProvider(
+    providerClass: Class[JavaSSLEngineProvider],
     serverConfig: ServerConfig, applicationProvider: ApplicationProvider): JavaSSLEngineProvider = {
     var serverConfigProviderArgsConstructor: Constructor[_] = null
     var providerArgsConstructor: Constructor[_] = null
@@ -73,7 +74,8 @@ object ServerSSLEngine {
     }
   }
 
-  private def createScalaSSLEngineProvider(providerClass: Class[ScalaSSLEngineProvider],
+  private def createScalaSSLEngineProvider(
+    providerClass: Class[ScalaSSLEngineProvider],
     serverConfig: ServerConfig, applicationProvider: ApplicationProvider): ScalaSSLEngineProvider = {
 
     var serverConfigProviderArgsConstructor: Constructor[ScalaSSLEngineProvider] = null

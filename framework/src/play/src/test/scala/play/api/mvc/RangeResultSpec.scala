@@ -1,9 +1,9 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
-import java.io.{ File, FileOutputStream }
+import java.io.{ File, FileOutputStream, InputStream }
 import java.nio.file.Path
 
 import akka.actor.ActorSystem
@@ -11,16 +11,14 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import play.api.http.HttpEntity
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
 import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import org.specs2.mutable.Specification
 
-import scala.tools.nsc.interpreter.InputStream
-
-object ByteRangeSpec extends Specification {
+class ByteRangeSpec extends Specification {
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   "Distance" in {
     "Between 0-10 and 20-30 is 10" in {
@@ -46,7 +44,7 @@ object ByteRangeSpec extends Specification {
   }
 }
 
-object RangeSpec extends Specification {
+class RangeSpec extends Specification {
 
   def checkRange(entityLength: Long, header: String, expected: Range) = {
     val range = Range(Some(entityLength), header)
@@ -182,11 +180,12 @@ object RangeSpec extends Specification {
   "Merge ranges" in {
     val range1 = Range(entityLength = Some(10000), range = "0-10")
     val range2 = Range(entityLength = Some(10000), range = "5-15")
-    val merged = (range1, range2) match {
-      case (Some(r1), Some(r2)) => r1.merge(r2)
+    (range1, range2) must beLike {
+      case (Some(r1), Some(r2)) =>
+        val merged = r1.merge(r2)
+        merged.start must beSome(0)
+        merged.end must beSome(15)
     }
-    merged.start must beSome(0)
-    merged.end must beSome(15)
   }
 
   "Validate ranges" in {
@@ -240,7 +239,7 @@ object RangeSpec extends Specification {
   }
 }
 
-object RangeSetSpec extends Specification {
+class RangeSetSpec extends Specification {
 
   "Satisfiable range sets" in {
 
@@ -320,26 +319,29 @@ object RangeSetSpec extends Specification {
     }
     "Satisfiable when both first-byte-pos and last-byte-pos are specified and first-byte-pos is less last-byte-pos" in {
       val rangeSet = RangeSet(entityLength = None, rangeHeader = Some("bytes=20-30,200-210"))
-      rangeSet must beAnInstanceOf[UnsatisfiableRangeSet]
+      rangeSet must beAnInstanceOf[SatisfiableRangeSet]
     }
   }
 }
 
-object RangeResultSpec extends Specification {
+class RangeResultSpec extends Specification {
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   "Result" should {
 
     "have status ok when there is no range" in {
       val bytes: List[Byte] = List[Byte](1, 2, 3)
       val source = Source(bytes).map(b => ByteString.fromArray(Array[Byte](b)))
-      val Result(ResponseHeader(status, _, _), _) = RangeResult.ofSource(bytes.length, source, None, None, None)
+      val Result(ResponseHeader(status, _, _), _, _, _, _) =
+        RangeResult.ofSource(bytes.length, source, None, None, None)
       status must_== 200
     }
 
     "have headers" in {
       val bytes: List[Byte] = List[Byte](1, 2, 3)
       val source = Source(bytes).map(b => ByteString.fromArray(Array[Byte](b)))
-      val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType)) = RangeResult.ofSource(bytes.length, source, None, None, None)
+      val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType), _, _, _) =
+        RangeResult.ofSource(bytes.length, source, None, None, None)
       headers must havePair("Accept-Ranges" -> "bytes")
       contentType must beSome("application/octet-stream")
     }
@@ -347,21 +349,24 @@ object RangeResultSpec extends Specification {
     "support Content-Disposition header" in {
       val bytes: List[Byte] = List[Byte](1, 2, 3)
       val source = Source(bytes).map(b => ByteString.fromArray(Array[Byte](b)))
-      val Result(ResponseHeader(_, headers, _), _) = RangeResult.ofSource(bytes.length, source, None, Some("video.mp4"), None)
+      val Result(ResponseHeader(_, headers, _), _, _, _, _) =
+        RangeResult.ofSource(bytes.length, source, None, Some("video.mp4"), None)
       headers must havePair("Content-Disposition" -> "attachment; filename=\"video.mp4\"; filename*=utf-8''video.mp4")
     }
 
     "support non-ISO-8859-1 filename in Content-Disposition header" in {
       val bytes: List[Byte] = List[Byte](1, 2, 3)
       val source = Source(bytes).map(b => ByteString.fromArray(Array[Byte](b)))
-      val Result(ResponseHeader(_, headers, _), _) = RangeResult.ofSource(bytes.length, source, None, Some("测 试.tmp"), None)
+      val Result(ResponseHeader(_, headers, _), _, _, _, _) =
+        RangeResult.ofSource(bytes.length, source, None, Some("测 试.tmp"), None)
       headers must havePair("Content-Disposition" -> "attachment; filename=\"测 试.tmp\"; filename*=utf-8''%E6%B5%8B%20%E8%AF%95.tmp")
     }
 
     "support first byte position" in {
       val bytes: List[Byte] = List[Byte](1, 2, 3)
       val source = Source(bytes).map(b => ByteString.fromArray(Array[Byte](b)))
-      val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(data, _, _)) = RangeResult.ofSource(bytes.length, source, Some("bytes=1-"), None, None)
+      val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(data, _, _), _, _, _) =
+        RangeResult.ofSource(bytes.length, source, Some("bytes=1-"), None, None)
       headers must havePair("Content-Range" -> "bytes 1-2/3")
 
       implicit val system = ActorSystem()
@@ -373,7 +378,8 @@ object RangeResultSpec extends Specification {
     "support last byte position" in {
       val bytes: List[Byte] = List[Byte](1, 2, 3, 4, 5, 6)
       val source = Source(bytes).map(b => ByteString.fromArray(Array[Byte](b)))
-      val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(data, _, _)) = RangeResult.ofSource(bytes.length, source, Some("bytes=2-4"), None, None)
+      val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(data, _, _), _, _, _) =
+        RangeResult.ofSource(bytes.length, source, Some("bytes=2-4"), None, None)
       headers must havePair("Content-Range" -> "bytes 2-4/6")
       implicit val system = ActorSystem()
       implicit val materializer = ActorMaterializer()
@@ -381,10 +387,23 @@ object RangeResultSpec extends Specification {
       mutable.WrappedArray.make(result) must be_==(mutable.WrappedArray.make(Array[Byte](3, 4, 5)))
     }
 
+    "support last byte position without entity length" in {
+      val bytes: List[Byte] = List[Byte](1, 2, 3, 4, 5, 6)
+      val source = Source(bytes).map(b => ByteString.fromArray(Array[Byte](b)))
+      val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(data, _, _), _, _, _) =
+        RangeResult.ofSource(None, source, Some("bytes=2-4"), None, None)
+      headers must havePair("Content-Range" -> "bytes 2-4/*")
+      implicit val system = ActorSystem()
+      implicit val materializer = ActorMaterializer()
+      val result = Await.result(data.runFold(ByteString.empty)(_ ++ _).map(_.toArray), Duration.Inf)
+      mutable.WrappedArray.make(result) must be_==(mutable.WrappedArray.make(Array[Byte](3, 4, 5, 6)))
+    }
+
     "support sending path" in {
       val file = createFile(java.nio.file.Paths.get("path.mp4"))
       try {
-        val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType)) = RangeResult.ofPath(file.toPath, None, Some("video/mp4"))
+        val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType), _, _, _) =
+          RangeResult.ofPath(file.toPath, None, Some("video/mp4"))
         headers must havePair("Content-Disposition" -> "attachment; filename=\"path.mp4\"; filename*=utf-8''path.mp4")
         contentType must beSome("video/mp4")
       } finally {
@@ -395,7 +414,8 @@ object RangeResultSpec extends Specification {
     "support sending file" in {
       val file = createFile(java.nio.file.Paths.get("file.mp4"))
       try {
-        val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType)) = RangeResult.ofFile(file, None, Some("video/mp4"))
+        val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType), _, _, _) =
+          RangeResult.ofFile(file, None, Some("video/mp4"))
         headers must havePair("Content-Disposition" -> "attachment; filename=\"file.mp4\"; filename*=utf-8''file.mp4")
         contentType must beSome("video/mp4")
       } finally {
@@ -407,7 +427,8 @@ object RangeResultSpec extends Specification {
       val file = createFile(java.nio.file.Paths.get("input1.mp4"))
       val inputStream = java.nio.file.Files.newInputStream(file.toPath)
       try {
-        val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType)) = RangeResult.ofStream(inputStream, None, "file.mp4", Some("video/mp4"))
+        val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType), _, _, _) =
+          RangeResult.ofStream(inputStream, None, "file.mp4", Some("video/mp4"))
         headers must havePair("Content-Disposition" -> "attachment; filename=\"file.mp4\"; filename*=utf-8''file.mp4")
         contentType must beSome("video/mp4")
       } finally {
@@ -420,7 +441,8 @@ object RangeResultSpec extends Specification {
       val file = createFile(java.nio.file.Paths.get("input2.mp4"))
       val inputStream = java.nio.file.Files.newInputStream(file.toPath)
       try {
-        val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType)) = RangeResult.ofStream(file.length(), inputStream, None, "file.mp4", Some("video/mp4"))
+        val Result(ResponseHeader(_, headers, _), HttpEntity.Streamed(_, _, contentType), _, _, _) =
+          RangeResult.ofStream(file.length(), inputStream, None, "file.mp4", Some("video/mp4"))
         headers must havePair("Content-Disposition" -> "attachment; filename=\"file.mp4\"; filename*=utf-8''file.mp4")
         contentType must beSome("video/mp4")
       } finally {

@@ -1,13 +1,11 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.libs;
 
 import akka.actor.Actor;
 import akka.actor.ActorRef;
-import akka.actor.ActorSystem;
 import akka.actor.Props;
-import play.api.Play;
 import play.api.libs.concurrent.ActorRefProvider;
 import scala.reflect.ClassTag$;
 import scala.runtime.AbstractFunction1;
@@ -21,16 +19,6 @@ import java.util.function.Function;
 public class Akka {
 
     /**
-     * Retrieve the application Akka Actor system.
-     *
-     * @deprecated Please use "@Inject ActorSystem actorSystem", since 2.5.0
-     */
-    @Deprecated
-    public static ActorSystem system() {
-        return play.api.libs.concurrent.Akka.system(Play.current());
-    }
-
-    /**
      * Create a provider for an actor implemented by the given class, with the given name.
      *
      * This will instantiate the actor using Play's injector, allowing it to be dependency injected itself.  The returned
@@ -39,6 +27,7 @@ public class Akka {
      * Typically, you will want to use this in combination with a named qualifier, so that multiple ActorRefs can be
      * bound, and the scope should be set to singleton or eager singleton.
      *
+     * @param <T> the type of the actor
      * @param actorClass The class that implements the actor.
      * @param name The name of the actor.
      * @param props A function to provide props for the actor. The props passed in will just describe how to create the
@@ -63,6 +52,7 @@ public class Akka {
      * Typically, you will want to use this in combination with a named qualifier, so that multiple ActorRefs can be
      * bound, and the scope should be set to singleton or eager singleton.
      *
+     * @param <T> the type of the actor
      * @param actorClass The class that implements the actor.
      * @param name The name of the actor.
      * @return A provider for the actor.

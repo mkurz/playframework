@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package akka.http.play
 
@@ -115,7 +115,8 @@ object WebSocketHandler {
 
   private def frameToRawMessage(header: FrameHeader, data: ByteString) = {
     val unmasked = FrameEventParser.mask(data, header.mask)
-    RawMessage(frameOpCodeToMessageType(header.opcode),
+    RawMessage(
+      frameOpCodeToMessageType(header.opcode),
       unmasked, header.fin)
   }
 

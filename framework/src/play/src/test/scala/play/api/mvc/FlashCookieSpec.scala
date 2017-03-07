@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
@@ -8,7 +8,7 @@ import java.net.URLEncoder
 
 import play.api.http.HttpConfiguration
 
-object FlashCookieSpec extends Specification {
+class FlashCookieSpec extends Specification {
 
   def oldEncoder(data: Map[String, String]): String = {
     URLEncoder.encode(

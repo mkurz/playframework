@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.cache
 
@@ -49,7 +49,7 @@ trait SyncCacheApi {
 /**
  * A cache API. This class is deprecated and will be removed in future versions.
  */
-@deprecated("Use SyncCacheApi or AsyncCacheApi instead")
+@deprecated("Use SyncCacheApi or AsyncCacheApi instead", "2.6.0")
 trait CacheApi {
 
   /**
@@ -100,7 +100,7 @@ class DefaultSyncCacheApi @Inject() (cacheApi: AsyncCacheApi) extends SyncCacheA
   }
 
   def getOrElseUpdate[A: ClassTag](key: String, expiration: Duration)(orElse: => A): A = {
-    Await.result(getOrElseUpdate(key, expiration)(Future.successful(orElse)), awaitTimeout)
+    Await.result(cacheApi.getOrElseUpdate(key, expiration)(Future.successful(orElse)), awaitTimeout)
   }
 
   @deprecated("Use getOrElseUpdate", "2.6.0")

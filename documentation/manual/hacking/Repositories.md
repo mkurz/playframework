@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Artifact repositories
 
 ## Typesafe repository
@@ -15,12 +15,9 @@ resolvers += Resolver.typesafeRepo("releases")
 
 ## Accessing snapshots
 
-Snapshots are published daily from our [[Continuous Integration Server|ThirdPartyTools]] to the Typesafe snapshots repository at <https://oss.sonatype.org/content/repositories/snapshots/>.
-
-> **Note:** it's an ivy style repository.
+Snapshots are published daily from our [[Continuous Integration Server|ThirdPartyTools]] to the Sonatype snapshots repository at <https://oss.sonatype.org/content/repositories/snapshots/>.
 
 ```scala
-// The Typesafe snapshots repository
-resolvers += Resolver.url("Typesafe Ivy Snapshots Repository", url("https://oss.sonatype.org/content/repositories/snapshots/"))(Resolver.ivyStylePatterns)
+resolvers += Resolver.sonatypeRepo("snapshots")
 ```
 

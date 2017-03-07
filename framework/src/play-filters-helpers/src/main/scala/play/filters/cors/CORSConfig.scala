@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.filters.cors
 
@@ -9,14 +9,17 @@ import play.filters.cors.CORSConfig.Origins
 import scala.concurrent.duration._
 
 /**
- * Configuration for [[AbstractCORSPolicy]]
+ * Configuration for play.filters.cors.AbstractCORSPolicy.
  *
- *  - allow only requests with origins from a whitelist (by default all origins are allowed)
- *  - allow only HTTP methods from a whitelist for preflight requests (by default all methods are allowed)
- *  - allow only HTTP headers from a whitelist for preflight requests (by default all headers are allowed)
- *  - set custom HTTP headers to be exposed in the response (by default no headers are exposed)
- *  - disable/enable support for credentials (by default credentials support is enabled)
- *  - set how long (in seconds) the results of a preflight request can be cached in a preflight result cache (by default 3600 seconds, 1 hour)
+ * <ul>
+ *  <li>allow only requests with origins from a whitelist (by default all origins are allowed)</li>
+ *  <li>allow only HTTP methods from a whitelist for preflight requests (by default all methods are allowed)</li>
+ * <li>allow only HTTP headers from a whitelist for preflight requests (by default all headers are allowed)</li>
+ * <li>set custom HTTP headers to be exposed in the response (by default no headers are exposed)</li>
+ * <li>disable/enable support for credentials (by default credentials support is enabled)</li>
+ *  <li>set how long (in seconds) the results of a preflight request can be cached in a preflight result cache (by default 3600 seconds, 1 hour)</li>
+ *  <li>enable/disable serving requests with origins not in whitelist as non-CORS requests (by default they are forbidden)</li>
+ * </ul>
  *
  * @param  allowedOrigins
  *   [[http://www.w3.org/TR/cors/#resource-requests §6.1.2]]
@@ -36,7 +39,8 @@ case class CORSConfig(
     isHttpHeaderAllowed: String => Boolean = _ => true,
     exposedHeaders: Seq[String] = Seq.empty,
     supportsCredentials: Boolean = true,
-    preflightMaxAge: Duration = 1.hour) {
+    preflightMaxAge: Duration = 1.hour,
+    serveForbiddenOrigins: Boolean = false) {
   def anyOriginAllowed: Boolean = allowedOrigins == Origins.All
   def withAnyOriginAllowed = withOriginsAllowed(Origins.All)
 
@@ -46,6 +50,7 @@ case class CORSConfig(
   def withExposedHeaders(headers: Seq[String]): CORSConfig = copy(exposedHeaders = headers)
   def withCredentialsSupport(supportsCredentials: Boolean): CORSConfig = copy(supportsCredentials = supportsCredentials)
   def withPreflightMaxAge(maxAge: Duration): CORSConfig = copy(preflightMaxAge = maxAge)
+  def withServeForbiddenOrigins(serveForbiddenOrigins: Boolean): CORSConfig = copy(serveForbiddenOrigins = serveForbiddenOrigins)
 
   import scala.collection.JavaConverters._
   import scala.compat.java8.FunctionConverters._
@@ -87,7 +92,8 @@ object CORSConfig {
       isHttpHeaderAllowed = _ => false,
       exposedHeaders = Seq.empty,
       supportsCredentials = true,
-      preflightMaxAge = 0.seconds)
+      preflightMaxAge = 0.seconds,
+      serveForbiddenOrigins = false)
 
   /**
    * Build a [[CORSConfig]]from a [[play.api.Configuration]]
@@ -102,6 +108,7 @@ object CORSConfig {
    *     exposedHeaders = [...]  # empty by default
    *     supportsCredentials = true  # true by default
    *     preflightMaxAge = 1 hour  # 1 hour by default
+   *     serveForbiddenOrigins = false  # false by default
    * }
    *
    * }}}
@@ -132,7 +139,9 @@ object CORSConfig {
       supportsCredentials =
         config.get[Boolean]("supportsCredentials"),
       preflightMaxAge =
-        config.get[Duration]("preflightMaxAge")
+        config.get[Duration]("preflightMaxAge"),
+      serveForbiddenOrigins =
+        config.get[Boolean]("serveForbiddenOrigins")
     )
   }
 }

@@ -1,11 +1,11 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Using LESS CSS
 
 [LESS CSS](http://lesscss.org/) is a dynamic stylesheet language. It allows considerable flexibility in the way you write CSS files including support for variables, mixins and more.
 
 Compilable assets in Play must be defined in the `app/assets` directory. They are handled by the build process, and LESS sources are compiled into standard CSS files. The generated CSS files are distributed as standard resources into the same `public/` folder as the unmanaged assets, meaning that there is no difference in the way you use them once compiled.
 
-For example, a LESS source file at `app/assets/stylesheets/main.less` will be available as a standard resource at `public/stylesheets/main.css`.  Play will compile `main.less` automatically.  Other LESS files need to be included in your `build.sbt` file:
+For example, a LESS source file at `app/assets/stylesheets/main.less` will be available as a standard resource at `public/stylesheets/main.css`.  Play will compile `main.less` automatically.  Files not named `main.less` need to be included in your `build.sbt` file:
 
 ```scala
 includeFilter in (Assets, LessKeys.less) := "foo.less" | "bar.less"

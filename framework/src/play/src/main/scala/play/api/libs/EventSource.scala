@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.libs
 
@@ -85,7 +85,8 @@ object EventSource {
      * and the nameExtractor and idExtractor will implicitly resolve to `None`.
      *
      */
-    def apply[A](a: A)(implicit dataExtractor: EventDataExtractor[A],
+    def apply[A](a: A)(implicit
+      dataExtractor: EventDataExtractor[A],
       nameExtractor: EventNameExtractor[A],
       idExtractor: EventIdExtractor[A]): Event = {
       Event(dataExtractor.eventData(a), idExtractor.eventId(a), nameExtractor.eventName(a))

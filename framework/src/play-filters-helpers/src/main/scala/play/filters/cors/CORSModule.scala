@@ -1,14 +1,14 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.filters.cors
 
 import javax.inject.{ Inject, Provider }
 
 import akka.stream.Materializer
+import play.api.Configuration
 import play.api.http.HttpErrorHandler
-import play.api.{ Environment, Configuration }
-import play.api.inject.Module
+import play.api.inject._
 
 /**
  * Provider for CORSConfig.
@@ -31,12 +31,10 @@ class CORSFilterProvider @Inject() (configuration: Configuration, errorHandler: 
 /**
  * CORS module.
  */
-class CORSModule extends Module {
-  def bindings(environment: Environment, configuration: Configuration) = Seq(
-    bind[CORSConfig].toProvider[CORSConfigProvider],
-    bind[CORSFilter].toProvider[CORSFilterProvider]
-  )
-}
+class CORSModule extends SimpleModule(
+  bind[CORSConfig].toProvider[CORSConfigProvider],
+  bind[CORSFilter].toProvider[CORSFilterProvider]
+)
 
 /**
  * Components for the CORS Filter

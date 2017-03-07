@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.formatters
 
@@ -40,7 +40,7 @@ object Multipart {
   /**
    * Creates a new random number of the given length and base64 encodes it (using a custom "safe" alphabet).
    *
-   * @throws IllegalArgumentException if the length is greater than 70 or less than 1 as specified in
+   * @throws java.lang.IllegalArgumentException if the length is greater than 70 or less than 1 as specified in
    *                                  <a href="https://tools.ietf.org/html/rfc2046#section-5.1.1">rfc2046</a>
    */
   def randomBoundary(length: Int = 18, random: java.util.Random = ThreadLocalRandom.current()): String = {
@@ -115,7 +115,8 @@ object Multipart {
 
   }
 
-  private def streamed(boundary: String,
+  private def streamed(
+    boundary: String,
     nioCharset: Charset, chunkSize: Int): GraphStage[FlowShape[MultipartFormData.Part[Source[ByteString, _]], Source[ByteString, Any]]] =
 
     new GraphStage[FlowShape[MultipartFormData.Part[Source[ByteString, _]], Source[ByteString, Any]]] {

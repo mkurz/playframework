@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Cross-Origin Resource Sharing
 
 Play provides a filter that implements Cross-Origin Resource Sharing (CORS).
@@ -38,6 +38,7 @@ The available options include:
 * `play.filters.cors.exposedHeaders` - set custom HTTP headers to be exposed in the response (by default no headers are exposed)
 * `play.filters.cors.supportsCredentials` - disable/enable support for credentials (by default credentials support is enabled)
 * `play.filters.cors.preflightMaxAge` - set how long the results of a preflight request can be cached in a preflight result cache (by default 1 hour)
+* `play.filters.cors.serveForbiddenOrigins` - enable/disable serving requests with origins not in whitelist as non-CORS requests (by default they are forbidden)
 
 For example:
 

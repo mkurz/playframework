@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.data
 
@@ -223,10 +223,10 @@ case class Form[T](mapping: Mapping[T], data: Map[String, String], errors: Seq[F
   /**
    * Returns the form errors serialized as Json.
    */
-  def errorsAsJson(implicit messages: play.api.i18n.Messages): play.api.libs.json.JsValue = {
+  def errorsAsJson(implicit provider: play.api.i18n.MessagesProvider): play.api.libs.json.JsValue = {
 
     import play.api.libs.json._
-
+    val messages = provider.messages
     Json.toJson(
       errors.groupBy(_.key).mapValues { errors =>
         errors.map(e => messages(e.message, e.args.map(a => translateMsgArg(a)): _*))
@@ -235,9 +235,11 @@ case class Form[T](mapping: Mapping[T], data: Map[String, String], errors: Seq[F
 
   }
 
-  private def translateMsgArg(msgArg: Any)(implicit messages: play.api.i18n.Messages) = msgArg match {
-    case key: String => messages(key)
-    case keys: Seq[String] => keys.map(key => messages(key))
+  private def translateMsgArg(msgArg: Any)(implicit provider: play.api.i18n.MessagesProvider) = msgArg match {
+    case key: String => provider.messages(key)
+    case keys: Seq[_] =>
+      val k = keys.asInstanceOf[Seq[String]]
+      k.map(key => provider.messages(key))
     case _ => msgArg
   }
 
@@ -418,6 +420,13 @@ case class FormError(key: String, messages: Seq[String], args: Seq[Any] = Nil) {
    * @param message The new message.
    */
   def withMessage(message: String): FormError = FormError(key, message)
+
+  /**
+   * Displays the formatted message, for use in a template.
+   */
+  def format(implicit messages: play.api.i18n.Messages): String = {
+    messages.apply(message, args)
+  }
 }
 
 object FormError {

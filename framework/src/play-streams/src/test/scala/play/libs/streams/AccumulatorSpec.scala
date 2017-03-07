@@ -14,14 +14,14 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.compat.java8.FutureConverters
 
 import akka.actor.ActorSystem
-import akka.stream.javadsl.{ Flow, Source, Sink }
+import akka.stream.javadsl.{ Source, Sink }
 import akka.stream.{ ActorMaterializer, Materializer }
 import akka.japi.function.{ Function => JFn, Function2 => JFn2 }
 
 import org.reactivestreams.{ Subscription, Subscriber, Publisher }
 
-object AccumulatorSpec extends org.specs2.mutable.Specification {
-  import scala.collection.JavaConversions.asJavaIterable
+class AccumulatorSpec extends org.specs2.mutable.Specification {
+  import scala.collection.JavaConverters.asJavaIterable
 
   def withMaterializer[T](block: Materializer => T) = {
     val system = ActorSystem("test")
@@ -34,7 +34,8 @@ object AccumulatorSpec extends org.specs2.mutable.Specification {
   }
 
   def sum: Accumulator[Int, Int] =
-    Accumulator.fromSink(Sink.fold[Int, Int](0,
+    Accumulator.fromSink(Sink.fold[Int, Int](
+      0,
       new JFn2[Int, Int, Int] { def apply(a: Int, b: Int) = a + b }))
 
   def source = Source from asJavaIterable(1 to 3)

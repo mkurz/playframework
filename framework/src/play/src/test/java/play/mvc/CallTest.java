@@ -1,15 +1,8 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.mvc;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.TreeMap;
-import java.util.List;
-import java.util.Map;
-
-import play.api.http.MediaRange;
 import play.mvc.Http.Request;
 import play.mvc.Http.RequestBuilder;
 

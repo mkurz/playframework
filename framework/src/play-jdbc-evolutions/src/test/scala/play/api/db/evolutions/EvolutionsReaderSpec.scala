@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db.evolutions
 
@@ -7,7 +7,7 @@ import java.io.File
 import org.specs2.mutable.Specification
 import play.api.{ Environment, Mode }
 
-object EvolutionsReaderSpec extends Specification {
+class EvolutionsReaderSpec extends Specification {
 
   "EnvironmentEvolutionsReader" should {
 

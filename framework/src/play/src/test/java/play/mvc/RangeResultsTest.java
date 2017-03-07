@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.mvc;
 
@@ -10,11 +10,13 @@ import static play.mvc.Http.MimeTypes.*;
 import static play.mvc.Http.Status.*;
 
 import akka.stream.IOResult;
-import akka.stream.impl.QueueSource;
 import akka.stream.javadsl.FileIO;
 import akka.stream.javadsl.Source;
 import akka.util.ByteString;
 import org.junit.*;
+import play.api.http.DefaultFileMimeTypes;
+import play.api.http.FileMimeTypesConfiguration;
+import play.libs.Scala;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.Collections;
 import java.util.concurrent.CompletionStage;
 
 public class RangeResultsTest {
@@ -327,11 +330,21 @@ public class RangeResultsTest {
     private void mockRegularRequest() {
         Http.Request request = mock(Http.Request.class);
         when(this.ctx.request()).thenReturn(request);
+        
+        mockRegularFileTypes();
     }
 
     private void mockRangeRequest() {
         Http.Request request = mock(Http.Request.class);
         when(request.getHeader(RANGE)).thenReturn("bytes=0-1");
         when(this.ctx.request()).thenReturn(request);
+
+        mockRegularFileTypes();
+    }
+
+    private void mockRegularFileTypes() {
+        final DefaultFileMimeTypes defaultFileMimeTypes = new DefaultFileMimeTypes(new FileMimeTypesConfiguration(Scala.asScala(Collections.emptyMap())));
+        final FileMimeTypes fileMimeTypes = new FileMimeTypes(defaultFileMimeTypes);
+        when(this.ctx.fileMimeTypes()).thenReturn(fileMimeTypes);
     }
 }

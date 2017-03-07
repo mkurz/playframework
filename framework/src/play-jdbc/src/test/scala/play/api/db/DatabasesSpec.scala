@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db
 
@@ -8,7 +8,7 @@ import com.zaxxer.hikari.HikariDataSource
 import org.jdbcdslog.LogSqlDataSource
 import org.specs2.mutable.{ After, Specification }
 
-object DatabasesSpec extends Specification {
+class DatabasesSpec extends Specification {
 
   "Databases" should {
 

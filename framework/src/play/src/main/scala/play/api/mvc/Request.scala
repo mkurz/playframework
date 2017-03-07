@@ -1,9 +1,10 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
-import java.security.cert.X509Certificate
+import play.api.libs.typedmap.{ TypedEntry, TypedKey, TypedMap }
+import play.api.mvc.request.{ RemoteConnection, RequestTarget }
 
 import scala.annotation.{ implicitNotFound, tailrec }
 
@@ -38,54 +39,42 @@ trait Request[+A] extends RequestHeader {
   /**
    * Transform the request body.
    */
-  def map[B](f: A => B): Request[B] = new Request[B] {
-    override def id = self.id
-    override def tags = self.tags
-    override def uri = self.uri
-    override def path = self.path
-    override def method = self.method
-    override def version = self.version
-    override def queryString = self.queryString
-    override def headers = self.headers
-    override def remoteAddress = self.remoteAddress
-    override def secure = self.secure
-    override def clientCertificateChain = self.clientCertificateChain
+  def map[B](f: A => B): Request[B] = withBody(f(body))
 
-    override lazy val body = f(self.body)
-  }
-
+  // Override the return type and default implementation of these RequestHeader methods
+  override def withConnection(newConnection: RemoteConnection): Request[A] =
+    new RequestImpl[A](newConnection, method, target, version, headers, attrs, body)
+  override def withMethod(newMethod: String): Request[A] =
+    new RequestImpl[A](connection, newMethod, target, version, headers, attrs, body)
+  override def withTarget(newTarget: RequestTarget): Request[A] =
+    new RequestImpl[A](connection, method, newTarget, version, headers, attrs, body)
+  override def withVersion(newVersion: String): Request[A] =
+    new RequestImpl[A](connection, method, target, newVersion, headers, attrs, body)
+  override def withHeaders(newHeaders: Headers): Request[A] =
+    new RequestImpl[A](connection, method, target, version, newHeaders, attrs, body)
+  override def withAttrs(newAttrs: TypedMap): Request[A] =
+    new RequestImpl[A](connection, method, target, version, headers, newAttrs, body)
 }
 
 object Request {
-
-  def apply[A](rh: RequestHeader, a: A): Request[A] = new Request[A] {
-    override def id = rh.id
-    override def tags = rh.tags
-    override def uri = rh.uri
-    override def path = rh.path
-    override def method = rh.method
-    override def version = rh.version
-    override def queryString = rh.queryString
-    override def headers = rh.headers
-    override lazy val remoteAddress = rh.remoteAddress
-    override lazy val secure = rh.secure
-    override val clientCertificateChain = rh.clientCertificateChain
-    override val body = a
-  }
+  /**
+   * Create a new Request from a RequestHeader and a body. The RequestHeader's
+   * methods aren't evaluated when this method is called.
+   */
+  def apply[A](rh: RequestHeader, body: A): Request[A] = rh.withBody(body)
 }
 
-/** Used by Java wrapper */
-private[play] class RequestImpl[A](
-    override val body: A,
-    override val id: Long,
-    override val tags: Map[String, String],
-    override val uri: String,
-    override val path: String,
-    override val method: String,
-    override val version: String,
-    override val queryString: Map[String, Seq[String]],
-    override val headers: Headers,
-    override val remoteAddress: String,
-    override val secure: Boolean,
-    override val clientCertificateChain: Option[Seq[X509Certificate]]) extends Request[A] {
-}
+/**
+ * A standard implementation of a Request.
+ *
+ * @param body The body of the request.
+ * @tparam A The type of the body content.
+ */
+private[play] class RequestImpl[+A](
+  override val connection: RemoteConnection,
+  override val method: String,
+  override val target: RequestTarget,
+  override val version: String,
+  override val headers: Headers,
+  override val attrs: TypedMap,
+  override val body: A) extends Request[A]

@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.utils
 
-import play.api.inject.{Binding, BindingKey}
-import play.api.{Configuration, Environment, PlayException}
+import play.api.inject.{ Binding, BindingKey }
+import play.api.{ Configuration, Environment, PlayException }
 
 import scala.reflect.ClassTag
 
@@ -41,8 +41,9 @@ object Reflect {
    * @return Zero or more bindings to provide `ScalaTrait`
    */
   def bindingsFromConfiguration[ScalaTrait, JavaInterface, JavaAdapter <: ScalaTrait, JavaDelegate <: JavaInterface, Default <: ScalaTrait](
-    environment: Environment, config: Configuration, key: String, defaultClassName: String)(implicit scalaTrait: SubClassOf[ScalaTrait],
-      javaInterface: SubClassOf[JavaInterface], javaAdapter: ClassTag[JavaAdapter], javaDelegate: ClassTag[JavaDelegate], default: ClassTag[Default]): Seq[Binding[_]] = {
+    environment: Environment, config: Configuration, key: String, defaultClassName: String)(implicit
+    scalaTrait: SubClassOf[ScalaTrait],
+    javaInterface: SubClassOf[JavaInterface], javaAdapter: ClassTag[JavaAdapter], javaDelegate: ClassTag[JavaDelegate], default: ClassTag[Default]): Seq[Binding[_]] = {
 
     def bind[T: SubClassOf]: BindingKey[T] = BindingKey(implicitly[SubClassOf[T]].runtimeClass)
 
@@ -52,13 +53,17 @@ object Reflect {
       case Some(Left(direct)) =>
         Seq(
           bind[ScalaTrait].to(direct),
-          bind[JavaInterface].to[JavaDelegate]
+          bind[JavaInterface].to[JavaDelegate],
+          bind[JavaDelegate].toSelf,
+          BindingKey(direct).toSelf
         )
       // Implements the java interface
       case Some(Right(java)) =>
         Seq(
           bind[ScalaTrait].to[JavaAdapter],
-          bind[JavaInterface].to(java)
+          bind[JavaAdapter].toSelf,
+          bind[JavaInterface].to(java),
+          BindingKey(java).toSelf
         )
 
       case None => Nil
@@ -91,8 +96,9 @@ object Reflect {
    * @tparam Default The default implementation of `ScalaTrait` if no user implementation has been provided
    */
   def configuredClass[ScalaTrait, JavaInterface, Default <: ScalaTrait](
-    environment: Environment, config: Configuration, key: String, defaultClassName: String)(implicit scalaTrait: SubClassOf[ScalaTrait],
-      javaInterface: SubClassOf[JavaInterface], default: ClassTag[Default]): Option[Either[Class[_ <: ScalaTrait], Class[_ <: JavaInterface]]] = {
+    environment: Environment, config: Configuration, key: String, defaultClassName: String)(implicit
+    scalaTrait: SubClassOf[ScalaTrait],
+    javaInterface: SubClassOf[JavaInterface], default: ClassTag[Default]): Option[Either[Class[_ <: ScalaTrait], Class[_ <: JavaInterface]]] = {
 
     def loadClass(className: String, notFoundFatal: Boolean): Option[Class[_]] = {
       try {

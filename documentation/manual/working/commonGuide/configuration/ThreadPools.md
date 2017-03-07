@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Understanding Play thread pools
 
 Play Framework is, from the bottom up, an asynchronous web framework.  Streams are handled asynchronously using iteratees.  Thread pools in Play are tuned to use fewer threads than in traditional web frameworks, since IO in play-core never blocks.
@@ -30,20 +30,23 @@ In contrast, the following types of IO do not block:
 
 Play uses a number of different thread pools for different purposes:
 
-* **Netty boss/worker thread pools** - These are used internally by Netty for handling Netty IO.  An application's code should never be executed by a thread in these thread pools.
-* **Play default thread pool** - This is the thread pool in which all of your application code in Play Framework is executed.  It is an Akka dispatcher, and is used by the application `ActorSystem`. It can be configured by configuring Akka, described below.
+* **Internal thread pools** - These are used internally by the server engine for handling IO.  An application's code should never be executed by a thread in these thread pools.  Play is configured with Akka HTTP server backend by default, and so [[configuration settings|SettingsAkkaHttp]] from `application.conf` should be used to change the backend.  Alternately, Play also comes with a Netty server backend which, if enabled, also has settings that can be [[configured|SettingsNetty]] from `application.conf`.
 
-> Note that in Play 2.4 several thread pools were combined together into the Play default thread pool.
+* **Play default thread pool** - This is the thread pool in which all of your application code in Play Framework is executed.  It is an Akka dispatcher, and is used by the application `ActorSystem`. It can be configured by configuring Akka, described below.
 
 ## Using the default thread pool
 
 All actions in Play Framework use the default thread pool.  When doing certain asynchronous operations, for example, calling `map` or `flatMap` on a future, you may need to provide an implicit execution context to execute the given functions in.  An execution context is basically another name for a `ThreadPool`.
 
-In most situations, the appropriate execution context to use will be the **Play default thread pool**.   This is accessible through `play.api.libs.concurrent.Execution.Implicits._` This can be used by importing it into your Scala source file:
+In most situations, the appropriate execution context to use will be the **Play default thread pool**.   This is accessible through `@Inject()(implicit ec: ExecutionContext)` This can be used by injecting it into your Scala source file:
 
 @[global-thread-pool](code/ThreadPools.scala)
 
-The Play thread pool connects directly to the Application's `ActorSystem` and uses the [default dispatcher](http://doc.akka.io/docs/akka/2.4.3/scala/dispatchers.html).
+or using [`CompletionStage`](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/CompletionStage.html) with an [`HttpExecutionContext`](api/java/play/libs/concurrent/HttpExecutionContext.html) in Java code:
+
+@[http-execution-context](code/detailedtopics/httpec/MyController.java)
+
+This execution context connects directly to the Application's `ActorSystem` and uses the [default dispatcher](http://doc.akka.io/docs/akka/current/scala/dispatchers.html).
 
 ### Configuring the default thread pool
 
@@ -57,7 +60,7 @@ You can also try the default Akka configuration:
 
 @[akka-default-config](code/ThreadPools.scala)
 
-The full configuration options available to you can be found [here](http://doc.akka.io/docs/akka/2.4.3/general/configuration.html#Listing_of_the_Reference_Configuration).
+The full configuration options available to you can be found [here](http://doc.akka.io/docs/akka/current/general/configuration.html#Listing_of_the_Reference_Configuration).
 
 ## Using other thread pools
 
@@ -65,7 +68,9 @@ In certain circumstances, you may wish to dispatch work to other thread pools.  
 
 @[my-context-usage](code/ThreadPools.scala)
 
-In this case, we are using Akka to create the `ExecutionContext`, but you could also easily create your own `ExecutionContext`s using Java executors, or the Scala fork join thread pool, for example.  To configure this Akka execution context, you can add the following configuration to your `application.conf`:
+In this case, we are using Akka to create the `ExecutionContext`, but you could also easily create your own `ExecutionContext`s using Java executors, or the Scala fork join thread pool, for example.  Play provides `play.libs.concurrent.CustomExecutionContext` and `play.api.libs.concurrent.CustomExecutionContext` that can be used to create your own execution contexts.
+
+To configure this Akka execution context, you can add the following configuration to your `application.conf`:
 
 @[my-context-config](code/ThreadPools.scala)
 
@@ -99,7 +104,7 @@ In some cases you may not be able to explicitly use the application classloader.
 
 Java code in Play uses a `ThreadLocal` to find out about contextual information such as the current HTTP request. Scala code doesn't need to use `ThreadLocal`s because it can use implicit parameters to pass context instead. `ThreadLocal`s are used in Java so that Java code can access contextual information without needing to pass context parameters everywhere.
 
-The problem with using thread locals however is that as soon as control switches to another thread, you lose thread local information. So if you were to map a `CompletionStage` using `thenApply`, and then try to access the HTTP context (eg, the session or request), it won't work.  To address this, Play provides an [`HttpExecutionContext`](api/java/play/libs/concurrent/HttpExecutionContext.html).  This allows you to capture the current context in an `Executor`, which you can then pass to the `CompletionStage` `*Async` methods such as `thenApplyAsync()`, and when the executor executes your callback, it will ensure the thread local context is setup so that you can access the request/session/flash/response objects.
+The problem with using thread locals however is that as soon as control switches to another thread, you lose thread local information. So if you were to map a `CompletionStage` using `thenApplyAsync`, or using `thenApply` at a point in time after the `Future` associated with that `CompletionStage` had completed, and you then try to access the HTTP context (eg, the session or request), it won't work .  To address this, Play provides an [`HttpExecutionContext`](api/java/play/libs/concurrent/HttpExecutionContext.html).  This allows you to capture the current context in an `Executor`, which you can then pass to the `CompletionStage` `*Async` methods such as `thenApplyAsync()`, and when the executor executes your callback, it will ensure the thread local context is setup so that you can access the request/session/flash/response objects.
 
 To use the `HttpExecutionContext`, inject it into your component, and then pass the current context anytime a `CompletionStage` is interacted with.  For example:
 

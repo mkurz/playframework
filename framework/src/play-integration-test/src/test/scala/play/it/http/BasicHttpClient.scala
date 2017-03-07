@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.it.http
 
@@ -9,10 +9,13 @@ import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
-import play.api.test.Helpers._
 import org.apache.commons.io.IOUtils
+import play.api.http.HttpConfiguration
+import play.api.test.Helpers._
+import play.core.server.common.ServerResultUtils
+import play.core.utils.CaseInsensitiveOrdered
 
-import scala.annotation.tailrec
+import scala.collection.immutable.TreeMap
 
 object BasicHttpClient {
 
@@ -191,7 +194,7 @@ class BasicHttpClient(port: Int, secure: Boolean) {
           parsed :: readHeaders
         }
       }
-      val headers = readHeaders.toMap
+      val headers = TreeMap(readHeaders: _*)(CaseInsensitiveOrdered)
 
       def readCompletely(length: Int): String = {
         if (length == 0) {
@@ -225,7 +228,7 @@ class BasicHttpClient(port: Int, secure: Boolean) {
         headers.get(CONTENT_LENGTH).map { length =>
           readCompletely(length.toInt)
         } getOrElse {
-          if (status != CONTINUE && status != NOT_MODIFIED && status != NO_CONTENT) {
+          if (new ServerResultUtils(HttpConfiguration()).mayHaveEntity(status)) {
             consumeRemaining(reader)
           } else {
             ""

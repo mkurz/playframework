@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.mvc;
 
@@ -20,15 +20,12 @@ import akka.util.ByteString;
 import akka.util.ByteString$;
 import akka.util.ByteStringBuilder;
 import com.fasterxml.jackson.core.JsonEncoding;
-import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import play.http.HttpEntity;
 import play.libs.Json;
 import play.utils.UriEncoding;
-import scala.compat.java8.OptionConverters;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -39,6 +36,10 @@ public class StatusHeader extends Result {
 
     private static final int DEFAULT_CHUNK_SIZE = 1024 * 8;
     private static final boolean DEFAULT_INLINE_MODE = true;
+
+    private static final FileMimeTypes fileMimeTypes() {
+        return Http.Context.current().fileMimeTypes();
+    }
 
     public StatusHeader(int status) {
         super(status);
@@ -209,9 +210,10 @@ public class StatusHeader extends Result {
     }
 
     /**
-     * Sends the given file.
+     * Sends the given file using the default inline mode.
      *
      * @param file The file to send.
+     * @return a '200 OK' result containing the file.
      */
     public Result sendFile(File file) {
         return sendFile(file, DEFAULT_INLINE_MODE);
@@ -278,7 +280,7 @@ public class StatusHeader extends Result {
         return new Result(status(), headers, new HttpEntity.Streamed(
                 data,
                 contentLength,
-                resourceName.map(name -> OptionConverters.toJava(play.api.libs.MimeTypes.forFileName(name))
+                resourceName.map(name -> fileMimeTypes().forFileName(name)
                         .orElse(Http.MimeTypes.BINARY)
                 )
         ));
@@ -339,7 +341,7 @@ public class StatusHeader extends Result {
         ByteStringBuilder builder = ByteString$.MODULE$.newBuilder();
 
         try {
-            JsonGenerator jgen = new JsonFactory(mapper).createGenerator(builder.asOutputStream(), encoding);
+            JsonGenerator jgen = mapper.getFactory().createGenerator(builder.asOutputStream(), encoding);
 
             mapper.writeValue(jgen, json);
             String contentType = "application/json; charset=" + encoding.getJavaName();

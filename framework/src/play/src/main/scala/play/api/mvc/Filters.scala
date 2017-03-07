@@ -1,11 +1,10 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.mvc
 
 import akka.stream.Materializer
 import akka.util.ByteString
-import play.api._
 import play.api.libs.streams.Accumulator
 import scala.concurrent.{ Promise, Future }
 
@@ -37,7 +36,7 @@ trait Filter extends EssentialFilter {
    * Apply the filter, given the request header and a function to call the next
    * operation.
    *
-   * @param f A function to call the next opertion. Call this to continue
+   * @param f A function to call the next operation. Call this to continue
    * normally with the current request. You do not need to call this function
    * if you want to generate a result in a different way.
    * @param rh The RequestHeader.
@@ -45,9 +44,8 @@ trait Filter extends EssentialFilter {
   def apply(f: RequestHeader => Future[Result])(rh: RequestHeader): Future[Result]
 
   def apply(next: EssentialAction): EssentialAction = {
+    implicit val ec = mat.executionContext
     new EssentialAction {
-      import play.api.libs.concurrent.Execution.Implicits.defaultContext
-
       def apply(rh: RequestHeader): Accumulator[ByteString, Result] = {
 
         // Promised result returned to this filter when it invokes the delegate function (the next filter in the chain)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.routing.sird
 
@@ -8,7 +8,7 @@ import java.net.{ URL, URI }
 import org.specs2.mutable.Specification
 import play.core.test.FakeRequest
 
-object UrlContextSpec extends Specification {
+class UrlContextSpec extends Specification {
 
   "path interpolation" should {
 
@@ -26,7 +26,7 @@ object UrlContextSpec extends Specification {
       }
     }
 
-    "match a parameterised path" in {
+    "match a parameterized path" in {
       "match" in {
         "/foo/testing/bar" must beLike {
           case p"/foo/$id/bar" => id must_== "testing"

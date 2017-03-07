@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db
 
@@ -9,7 +9,7 @@ import org.specs2.mutable.Specification
 import play.api.Configuration
 import scala.util.Try
 
-object DriverRegistrationSpec extends Specification {
+class DriverRegistrationSpec extends Specification {
 
   sequential
 

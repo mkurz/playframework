@@ -1,5 +1,11 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # H2 database
+
+> **Note:** From Play 2.6.x onwards you actually need to include the H2 Dependency on your own. To do this you just need to add the following to your build.sbt:
+>
+> ```
+> libraryDependencies += "com.h2database" % "h2" % "1.4.192"
+> ```
 
 The H2 in memory database is very convenient for development because your evolutions are run from scratch when play is restarted.  If you are using Anorm, you probably need it to closely mimic your planned production database.  To tell h2 that you want to mimic a particular database you add a parameter to the database url in your application.conf file, for example:
 
@@ -59,6 +65,8 @@ db.default.url="jdbc:h2:mem:play;MODE=MYSQL"
 ## Prevent in memory DB reset
 
 H2, by default, drops your in memory database if there are no connections to it anymore.  You probably don't want this to happen.  To prevent this add `DB_CLOSE_DELAY=-1` to the url (use a semicolon as a separator) eg: `jdbc:h2:mem:play;MODE=MYSQL;DB_CLOSE_DELAY=-1`
+
+> **Note:** Play's builtin JDBC Module will automatically add `DB_CLOSE_DELAY=-1`, however if you are using play-slick with evolutions you need to manually add `;DB_CLOSE_DELAY=-1` to your database url, else the evolution will be in a endless loop since the play application will restart after the evolutions are run, so that the applied evolutions will directly be lost.
 
 ## Caveats
 

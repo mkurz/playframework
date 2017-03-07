@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 var assert = require("assert");
 var jsRoutes = require("./jsRoutes");
@@ -32,7 +32,7 @@ describe("The JavaScript router", function() {
         qs = [1,2,3].map(function(i){return pname + '=' + i}).join('&');
         assert.equal("/take-list-tick-param?" + qs, data.url);
     });
-    it("should avoid name colisions on query string with complex names", function() {
+    it("should avoid name collisions on query string with complex names", function() {
         var data = jsRoutes.controllers.Application.takeTickedParams([1,2,3], "c");
         var pname1 = encodeURI('b[]');
         var pname2 = encodeURI('b%%')

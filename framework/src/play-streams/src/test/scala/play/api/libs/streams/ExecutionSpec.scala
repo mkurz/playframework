@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.libs.streams
 
@@ -10,7 +10,7 @@ import scala.concurrent.{ Await, ExecutionContext, Future }
 import scala.language.reflectiveCalls
 import scala.util.Try
 
-object ExecutionSpec extends Specification {
+class ExecutionSpec extends Specification {
   import Execution.trampoline
 
   val waitTime = Duration(5, SECONDS)
@@ -64,13 +64,17 @@ object ExecutionSpec extends Specification {
       }
 
       trampoline.execute(
-        TestRunnable(0,
+        TestRunnable(
+          0,
           TestRunnable(1),
-          TestRunnable(2,
-            TestRunnable(4,
+          TestRunnable(
+            2,
+            TestRunnable(
+              4,
               TestRunnable(6),
               TestRunnable(7)),
-            TestRunnable(5,
+            TestRunnable(
+              5,
               TestRunnable(8))),
           TestRunnable(3))
       )

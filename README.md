@@ -1,4 +1,5 @@
-[![Gitter](https://img.shields.io/gitter/room/gitterHQ/gitter.svg)](https://gitter.im/playframework/playframework?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [<img src="https://img.shields.io/travis/playframework/playframework.svg"/>](https://travis-ci.org/playframework/playframework)
+[![Gitter](https://img.shields.io/gitter/room/gitterHQ/gitter.svg)](https://gitter.im/playframework/playframework?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [<img src="https://img.shields.io/travis/playframework/playframework.svg"/>](https://travis-ci.org/playframework/playframework) [![Maven](https://img.shields.io/maven-central/v/com.typesafe.play/play_2.11.svg)](http://mvnrepository.com/artifact/com.typesafe.play/play_2.11)
+
 
 ## Play Framework - The High Velocity Web Framework
 
@@ -21,7 +22,7 @@ The Play Framework combines productivity and performance making it easy to build
 
 This software is licensed under the Apache 2 license, quoted below.
 
-Copyright (C) 2009-2016 Lightbend Inc. (https://www.lightbend.com).
+Copyright (C) 2009-2017 Lightbend Inc. (https://www.lightbend.com).
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this project except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
 

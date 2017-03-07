@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.j
 
@@ -19,6 +19,7 @@ import play.api.mvc._
 object JavaParsers {
 
   // Java code can't access objects defined on traits, so we use this instead
+  @deprecated("Inject PlayBodyParsers instead", "2.6.0")
   val parse = BodyParsers.parse
 
   def toJavaMultipartFormData[A](multipart: MultipartFormData[TemporaryFile]): play.mvc.Http.MultipartFormData[File] = {
@@ -29,7 +30,7 @@ object JavaParsers {
       lazy val getFiles = {
         multipart.files.map { file =>
           new play.mvc.Http.MultipartFormData.FilePart(
-            file.key, file.filename, file.contentType.orNull, file.ref.file)
+            file.key, file.filename, file.contentType.orNull, file.ref.path.toFile)
         }.asJava
       }
     }

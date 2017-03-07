@@ -1,15 +1,18 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.inject.guice
 
 import org.specs2.mutable.Specification
-
 import com.google.inject.AbstractModule
-
-import play.{ Configuration => JavaConfiguration, Environment => JavaEnvironment }
+import com.typesafe.config.Config
+import play.api.i18n.I18nModule
+import play.{ Environment => JavaEnvironment }
 import play.api.{ ApplicationLoader, Configuration, Environment }
-import play.api.inject.BuiltinModule
+import play.api.inject.{ BuiltinModule, DefaultApplicationLifecycle }
+
+import scala.concurrent.{ Await, Future }
+import scala.concurrent.duration._
 
 class GuiceApplicationLoaderSpec extends Specification {
 
@@ -28,7 +31,7 @@ class GuiceApplicationLoaderSpec extends Specification {
     }
 
     "allow replacing automatically loaded modules" in {
-      val builder = new GuiceApplicationBuilder().load(new BuiltinModule, new ManualTestModule)
+      val builder = new GuiceApplicationBuilder().load(new BuiltinModule, new I18nModule, new ManualTestModule)
       val loader = new GuiceApplicationLoader(builder)
       val app = loader.load(fakeContext)
       app.injector.instanceOf[Foo] must beAnInstanceOf[ManualFoo]
@@ -50,6 +53,16 @@ class GuiceApplicationLoaderSpec extends Specification {
       val loader = new GuiceApplicationLoader()
       val app = loader.load(fakeContextWithModule(classOf[JavaConfiguredModule]))
       app.injector.instanceOf[Foo] must beAnInstanceOf[JavaConfiguredFoo]
+    }
+
+    "call the stop hooks from the context" in {
+      val lifecycle = new DefaultApplicationLifecycle
+      var hooksCalled = false
+      lifecycle.addStopHook(() => Future.successful(hooksCalled = true))
+      val loader = new GuiceApplicationLoader()
+      val app = loader.load(ApplicationLoader.createContext(Environment.simple()).copy(lifecycle = lifecycle))
+      Await.ready(app.stop(), 5.minutes)
+      hooksCalled must_== true
     }
 
   }
@@ -88,7 +101,7 @@ class ScalaConfiguredModule(
 }
 class JavaConfiguredModule(
     environment: JavaEnvironment,
-    configuration: JavaConfiguration) extends AbstractModule {
+    config: Config) extends AbstractModule {
   def configure(): Unit = {
     bind(classOf[Foo]) to classOf[JavaConfiguredFoo]
   }

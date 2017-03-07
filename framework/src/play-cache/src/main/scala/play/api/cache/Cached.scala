@@ -1,8 +1,9 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.cache
 
+import java.time.Instant
 import javax.inject.Inject
 
 import akka.stream.Materializer
@@ -12,7 +13,6 @@ import play.api.libs.Codecs
 import play.api.libs.streams.Accumulator
 import play.api.mvc.Results.NotModified
 import play.api.mvc._
-import play.core.Execution.Implicits.internalContext
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -26,7 +26,7 @@ class Cached @Inject() (cache: AsyncCacheApi)(implicit materializer: Materialize
    * Cache an action.
    *
    * @param key Compute a key from the request header
-   * @param caching Compute a cache duration from the respone header
+   * @param caching Compute a cache duration from the resource header
    */
   def apply(
     key: RequestHeader => String,
@@ -120,14 +120,21 @@ final class CachedBuilder(
    * Compose the cache with an action
    */
   def build(action: EssentialAction): EssentialAction = EssentialAction { request =>
+    implicit val ec = materializer.executionContext
+
     val resultKey = key(request)
     val etagKey = s"$resultKey-etag"
+
+    def parseEtag(etag: String) = {
+      val Etag = """(?:W/)?("[^"]*")""".r
+      Etag.findAllMatchIn(etag).map(m => m.group(1)).toList
+    }
 
     // Check if the client has a version as new as ours
     Accumulator.flatten(Future.successful(request.headers.get(IF_NONE_MATCH)).flatMap {
       case Some(requestEtag) =>
         cache.get[String](etagKey).map {
-          case Some(etag) if requestEtag == "*" || etag == requestEtag => Some(Accumulator.done(NotModified))
+          case Some(etag) if requestEtag == "*" || parseEtag(requestEtag).contains(etag) => Some(Accumulator.done(NotModified))
           case _ => None
         }
       case None => Future.successful(None)
@@ -169,7 +176,7 @@ final class CachedBuilder(
   private def handleResult(result: Result, etagKey: String, resultKey: String): Result = {
     cachingWithEternity.andThen { duration =>
       // Format expiration date according to http standard
-      val expirationDate = http.dateFormat.print(System.currentTimeMillis() + duration.toMillis)
+      val expirationDate = http.dateFormat.format(Instant.ofEpochMilli(System.currentTimeMillis() + duration.toMillis))
       // Generate a fresh ETAG for it
       // Use quoted sha1 hash of expiration date as ETAG
       val etag = s""""${Codecs.sha1(expirationDate)}""""

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.server.common
 
@@ -180,9 +180,11 @@ object WebSocketFlowHandler {
 
                       // This is a client initiated close, so send back
                       if (isAvailable(remoteOut)) {
-                        // We can send, send immediately then terminate the connection
+                        // We can send the close frame
                         push(remoteOut, close)
-                        completeStage()
+                        // And complete both remote out and remote in
+                        complete(remoteOut)
+                        cancel(appIn)
                       } else {
                         // Store so we can send later
                         state = ClientInitiatedClose(close)

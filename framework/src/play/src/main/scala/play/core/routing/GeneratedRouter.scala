@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.core.routing
 
 import play.api.http.HttpErrorHandler
 import play.api.mvc._
-import play.api.routing.Router
+import play.api.routing.{ HandlerDef, Router }
 
 /**
  * A route
@@ -73,19 +73,13 @@ case class RouteParams(path: Map[String, Either[Throwable, String]], queryString
 }
 
 /**
- * Information about a `Handler`, especially useful for loading the handler
- * with reflection.
- */
-case class HandlerDef(classLoader: ClassLoader, routerPackage: String, controller: String, method: String, parameterTypes: Seq[Class[_]], verb: String, comments: String, path: String)
-
-/**
  * A generated router.
  */
 abstract class GeneratedRouter extends Router {
 
   def errorHandler: HttpErrorHandler
 
-  def badRequest(error: String) = Action.async { request =>
+  def badRequest(error: String) = ActionBuilder.ignoringBody.async { request =>
     errorHandler.onClientError(request, play.api.http.Status.BAD_REQUEST, error)
   }
 
@@ -231,8 +225,33 @@ abstract class GeneratedRouter extends Router {
   def createInvoker[T](
     fakeCall: => T,
     handlerDef: HandlerDef)(implicit hif: HandlerInvokerFactory[T]): HandlerInvoker[T] = {
-    val underlyingInvoker = hif.createInvoker(fakeCall, handlerDef)
-    new TaggingInvoker(underlyingInvoker, handlerDef)
+
+    // Get the implicit invoker factory and ask it for an invoker.
+    val underlyingInvoker: HandlerInvoker[T] = hif.createInvoker(fakeCall, handlerDef)
+
+    // Precalculate the function that adds routing information to the request
+    val tags = Map(
+      play.api.routing.Router.Tags.RoutePattern -> handlerDef.path,
+      play.api.routing.Router.Tags.RouteVerb -> handlerDef.verb,
+      play.api.routing.Router.Tags.RouteController -> handlerDef.controller,
+      play.api.routing.Router.Tags.RouteActionMethod -> handlerDef.method,
+      play.api.routing.Router.Tags.RouteComments -> handlerDef.comments
+    )
+    val modifyRequestFunc: RequestHeader => RequestHeader = { rh: RequestHeader =>
+      val newTags = if (rh.tags.isEmpty) tags else rh.tags ++ tags
+      val rh2 = rh.copy(tags = newTags)
+      val rh3 = rh2.withAttrs(rh2.attrs.updated(play.api.routing.Router.Attrs.HandlerDef, handlerDef))
+      rh3
+    }
+
+    // Wrap the invoker with another invoker that preprocesses requests as they are made,
+    // adding routing information to each request.
+    new HandlerInvoker[T] {
+      override def call(call: => T): Handler = {
+        val nextHandler = underlyingInvoker.call(call)
+        Handler.Stage.modifyRequest(modifyRequestFunc, nextHandler)
+      }
+    }
   }
 }
 

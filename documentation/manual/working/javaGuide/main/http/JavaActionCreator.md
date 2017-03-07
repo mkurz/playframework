@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Intercepting HTTP requests
 
 Play's Java APIs provide two ways of intercepting action calls. The first is called `ActionCreator`, which provides a `createAction` method that is used to create the initial action used in action composition. It handles calling the actual method for your action, which allows you to intercept requests.
@@ -41,6 +41,8 @@ The reason why a request header is returned is so that information, such as rout
 A very simple request handler that simply delegates to a router might look like this:
 
 @[simple](code/javaguide/http/SimpleHttpRequestHandler.java)
+
+Note that we need to inject `JavaHandlerComponents` and call `handler.withComponents` for the Java handler. This is required for Java actions to work. This will also be handled for you automatically if you extend `DefaultHttpRequestHandler` and call `super.handlerForRequest()`.
 
 Note that `HttpRequestHandler` currently has two legacy methods with default implementations that have since been moved to `ActionCreator`.
 

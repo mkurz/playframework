@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package javaguide.forms;
 
 import com.google.common.collect.ImmutableMap;
-import org.joda.time.LocalTime;
 import org.junit.Test;
 import play.Application;
+import play.core.j.JavaHandlerComponents;
 import play.data.DynamicForm;
 import play.data.Form;
 import play.data.FormFactory;
@@ -17,14 +17,12 @@ import play.mvc.*;
 import play.test.WithApplication;
 
 import javaguide.testhelpers.MockJavaAction;
-import javaguide.testhelpers.MockJavaActionHelper;
 import javaguide.forms.u1.User;
 
-import java.text.ParseException;
+import java.time.LocalTime;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
+import static javaguide.testhelpers.MockJavaActionHelper.call;
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 import static play.test.Helpers.*;
@@ -46,7 +44,7 @@ public class JavaForms extends WithApplication {
         //#create
 
         //#bind
-        Map<String,String> anyData = new HashMap();
+        Map<String,String> anyData = new HashMap<>();
         anyData.put("email", "bob@gmail.com");
         anyData.put("password", "secret");
 
@@ -59,12 +57,17 @@ public class JavaForms extends WithApplication {
 
     @Test
     public void bindFromRequest() {
-        Result result = MockJavaActionHelper.call(new Controller1(),
+        Result result = call(new Controller1(instanceOf(JavaHandlerComponents.class)),
                 fakeRequest("POST", "/").bodyForm(ImmutableMap.of("email", "e", "password", "p")), mat);
         assertThat(contentAsString(result), equalTo("e"));
     }
 
     public class Controller1 extends MockJavaAction {
+
+        Controller1(JavaHandlerComponents javaHandlerComponents) {
+            super(javaHandlerComponents);
+        }
+
         public Result index() {
             Form<User> userForm = formFactory().form(User.class);
             //#bind-from-request
@@ -76,20 +79,36 @@ public class JavaForms extends WithApplication {
     }
 
     @Test
-    public void constrants() {
+    public void constraints() {
         Form<javaguide.forms.u2.User> userForm = formFactory().form(javaguide.forms.u2.User.class);
         assertThat(userForm.bind(ImmutableMap.of("password", "p")).hasErrors(), equalTo(true));
     }
 
     @Test
     public void adhocValidation() {
-        Form<javaguide.forms.u3.User> userForm = formFactory().form(javaguide.forms.u3.User.class);
-        Form<javaguide.forms.u3.User> bound = userForm.bind(ImmutableMap.of("email", "e", "password", "p"));
-        assertThat(bound.hasGlobalErrors(), equalTo(true));
-        assertThat(bound.globalError().message(), equalTo("Invalid email or password"));
+        Result result = call(new U3UserController(instanceOf(JavaHandlerComponents.class)), fakeRequest("POST", "/")
+                .bodyForm(ImmutableMap.of("email", "e", "password", "p")), mat);
 
         // Run it through the template
-        assertThat(javaguide.forms.html.view.render(bound).toString(), containsString("Invalid email or password"));
+        assertThat(contentAsString(result), containsString("Invalid email or password"));
+    }
+
+    public class U3UserController extends MockJavaAction {
+
+        U3UserController(JavaHandlerComponents javaHandlerComponents) {
+            super(javaHandlerComponents);
+        }
+
+        public Result index() {
+            Form<javaguide.forms.u3.User> userForm = formFactory().form(javaguide.forms.u3.User.class).bindFromRequest();
+
+            if (userForm.hasErrors()) {
+                return badRequest(javaguide.forms.html.view.render(userForm));
+            } else {
+                javaguide.forms.u3.User user = userForm.get();
+                return ok("Got user " + user);
+            }
+        }
     }
 
     public static String authenticate(String email, String password) {
@@ -98,12 +117,11 @@ public class JavaForms extends WithApplication {
 
     @Test
     public void listValidation() {
-        Form<UserForm> userForm = formFactory().form(UserForm.class).bind(ImmutableMap.of("email", "e"));
-        assertThat(userForm.errors().get("email"), notNullValue());
-        assertThat(userForm.errors().get("email").get(0).message(), equalTo("This e-mail is already registered."));
+        Result result = call(new ListValidationController(instanceOf(JavaHandlerComponents.class)), fakeRequest("POST", "/")
+                .bodyForm(ImmutableMap.of("email", "e")), mat);
 
         // Run it through the template
-        assertThat(javaguide.forms.html.view.render(userForm).toString(), containsString("<p>This e-mail is already registered.</p>"));
+        assertThat(contentAsString(result), containsString("This e-mail is already registered."));
     }
 
     public static class UserForm {
@@ -134,9 +152,27 @@ public class JavaForms extends WithApplication {
         //#list-validate
     }
 
+    public class ListValidationController extends MockJavaAction {
+
+        ListValidationController(JavaHandlerComponents javaHandlerComponents) {
+            super(javaHandlerComponents);
+        }
+
+        public Result index() {
+            Form<UserForm> userForm = formFactory().form(UserForm.class).bindFromRequest();
+
+            if (userForm.hasErrors()) {
+                return badRequest(javaguide.forms.html.view.render(userForm));
+            } else {
+                UserForm user = userForm.get();
+                return ok("Got user " + user);
+            }
+        }
+    }
+
     @Test
     public void handleErrors() {
-        Result result = MockJavaActionHelper.call(new Controller2(), fakeRequest("POST", "/")
+        Result result = call(new Controller2(instanceOf(JavaHandlerComponents.class)), fakeRequest("POST", "/")
             .bodyForm(ImmutableMap.of("email", "e")), mat);
         assertThat(contentAsString(result), startsWith("Got user"));
     }
@@ -153,6 +189,10 @@ public class JavaForms extends WithApplication {
             String render(Form<?> form) {
                 return "rendered";
             }
+        }
+
+        Controller2(JavaHandlerComponents javaHandlerComponents) {
+            super(javaHandlerComponents);
         }
 
         public Result index() {
@@ -181,19 +221,24 @@ public class JavaForms extends WithApplication {
         //#fill
         userForm = userForm.fill(new User("bob@gmail.com", "secret"));
         //#fill
-        assertThat(userForm.field("email").value(), equalTo("bob@gmail.com"));
-        assertThat(userForm.field("password").value(), equalTo("secret"));
+        assertThat(userForm.field("email").getValue().get(), equalTo("bob@gmail.com"));
+        assertThat(userForm.field("password").getValue().get(), equalTo("secret"));
     }
 
     @Test
     public void dynamicForm() {
-        Result result = MockJavaActionHelper.call(new Controller3(),
+        Result result = call(new Controller3(instanceOf(JavaHandlerComponents.class)),
                 fakeRequest("POST", "/").bodyForm(ImmutableMap.of("firstname", "a", "lastname", "b")), mat);
         assertThat(contentAsString(result), equalTo("Hello a b"));
     }
 
     public class Controller3 extends MockJavaAction {
         FormFactory formFactory = formFactory();
+
+        Controller3(JavaHandlerComponents javaHandlerComponents) {
+            super(javaHandlerComponents);
+        }
+
         //#dynamic
         public Result hello() {
             DynamicForm requestData = formFactory.form().bindFromRequest();
@@ -212,8 +257,8 @@ public class JavaForms extends WithApplication {
 
         Form<WithLocalTime> form = application.injector().instanceOf(FormFactory.class).form(WithLocalTime.class);
         WithLocalTime obj = form.bind(ImmutableMap.of("time", "23:45")).get();
-        assertThat(obj.getTime(), equalTo(new LocalTime(23, 45)));
-        assertThat(form.fill(obj).field("time").value(), equalTo("23:45"));
+        assertThat(obj.getTime(), equalTo(LocalTime.of(23, 45)));
+        assertThat(form.fill(obj).field("time").getValue().get(), equalTo("23:45"));
     }
 
     public static class WithLocalTime {

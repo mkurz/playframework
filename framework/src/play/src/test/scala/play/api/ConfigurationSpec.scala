@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api
 
@@ -10,7 +10,7 @@ import org.specs2.mutable.Specification
 
 import scala.util.control.NonFatal
 
-object ConfigurationSpec extends Specification {
+class ConfigurationSpec extends Specification {
 
   def config(data: (String, Any)*) = Configuration.from(data.toMap)
 
@@ -92,7 +92,7 @@ object ConfigurationSpec extends Specification {
       exampleConfig.getBoolean("foo.bar3") must throwA[PlayException]
     }
 
-    "throw serialisable exceptions" in {
+    "throw serializable exceptions" in {
       // from Typesafe Config
       def copyViaSerialize(o: java.io.Serializable): AnyRef = {
         val byteStream = new ByteArrayOutputStream()
@@ -131,6 +131,9 @@ object ConfigurationSpec extends Specification {
       "but not in test mode" in {
         load(Mode.Test) must not(throwA[PlayException])
       }
+    }
+    "throw a useful exception when invalid collections are passed in the load method" in {
+      Configuration.load(Environment.simple(), Map("foo" -> Seq("one", "two"))) must throwA[PlayException]
     }
   }
 

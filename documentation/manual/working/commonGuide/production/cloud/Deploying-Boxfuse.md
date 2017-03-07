@@ -1,4 +1,4 @@
-<!--- Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com> -->
+<!--- Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com> -->
 # Deploying to Boxfuse and AWS
 
 Boxfuse lets you deploy your Play applications on AWS. It is based on 3 core principles: Immutable Infrastructure, Minimal Images and Blue/Green deployments.
@@ -15,7 +15,7 @@ As Boxfuse works with your AWS account, it first needs the necessary permissions
 
 ## Build your Application
 
-Package your app using the Lightbend Activator by typing the `activator dist` command in your project directory.
+Package your app using the `sbt dist` command in your project directory.
 
 ## Deploy your Application
 

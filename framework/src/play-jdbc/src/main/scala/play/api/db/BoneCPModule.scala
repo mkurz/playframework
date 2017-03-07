@@ -1,17 +1,16 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.db
 
 import java.sql.{ Connection, Statement }
 import javax.inject.{ Inject, Singleton }
+import javax.naming.InitialContext
 import javax.sql.DataSource
 
 import com.typesafe.config.Config
 import play.api._
-import play.api.inject.Module
-import play.api.libs.JNDI
-
+import play.api.inject._
 import com.jolbox.bonecp._
 import com.jolbox.bonecp.hooks._
 
@@ -20,13 +19,7 @@ import scala.concurrent.duration.FiniteDuration
 /**
  * BoneCP runtime inject module.
  */
-class BoneCPModule extends Module {
-  def bindings(environment: Environment, configuration: Configuration) = {
-    Seq(
-      bind[ConnectionPool].to[BoneConnectionPool]
-    )
-  }
-}
+class BoneCPModule extends SimpleModule(bind[ConnectionPool].to[BoneConnectionPool])
 
 /**
  * BoneCP components (for compile-time injection).
@@ -61,7 +54,8 @@ class BoneConnectionPool @Inject() (environment: Environment) extends Connection
       case "READ_UNCOMMITTED" => Connection.TRANSACTION_READ_UNCOMMITTED
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
-      case unknown => throw config.reportError("bonecp.isolation",
+      case unknown => throw config.reportError(
+        "bonecp.isolation",
         s"Unknown isolation level [$unknown]")
     }
     val catalog = config.getDeprecated[Option[String]]("bonecp.defaultCatalog", "defaultCatalog")
@@ -127,7 +121,7 @@ class BoneConnectionPool @Inject() (environment: Environment) extends Connection
 
     // Bind in JNDI
     dbConfig.jndiName foreach { jndiName =>
-      JNDI.initialContext.rebind(jndiName, wrappedDataSource)
+      new InitialContext().rebind(jndiName, wrappedDataSource)
       logger.info(s"""datasource [$name] bound to JNDI as $jndiName""")
     }
 

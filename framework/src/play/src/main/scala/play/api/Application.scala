@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api
 
@@ -9,14 +9,17 @@ import javax.inject.Inject
 import akka.actor.ActorSystem
 import akka.stream.{ ActorMaterializer, Materializer }
 import javax.inject.Singleton
+
 import play.api.http._
+import play.api.i18n.I18nComponents
 import play.api.inject.{ DefaultApplicationLifecycle, Injector, NewInstanceInjector, SimpleInjector }
-import play.api.libs.Crypto
-import play.api.libs.Files.{ DefaultTemporaryFileCreator, TemporaryFileCreator }
+import play.api.libs.Files._
 import play.api.libs.concurrent.ActorSystemProvider
 import play.api.libs.crypto._
-import play.api.mvc.EssentialFilter
+import play.api.mvc._
+import play.api.mvc.request.{ DefaultRequestFactory, RequestFactory }
 import play.api.routing.Router
+import play.core.j.JavaHelpers
 import play.core.{ SourceMapper, WebCommands }
 import play.utils._
 
@@ -54,13 +57,20 @@ trait Application {
   /**
    * `Dev`, `Prod` or `Test`
    */
-  def mode: Mode.Mode
+  def mode: Mode.Mode = environment.mode
+
+  /**
+   * The application's environment
+   */
+  def environment: Environment
 
   private[play] def isDev = (mode == Mode.Dev)
   private[play] def isTest = (mode == Mode.Test)
   private[play] def isProd = (mode == Mode.Prod)
 
   def configuration: Configuration
+
+  private[play] lazy val httpConfiguration = HttpConfiguration.fromConfiguration(configuration, environment)
 
   /**
    * The default ActorSystem used by the application.
@@ -73,11 +83,9 @@ trait Application {
   implicit def materializer: Materializer
 
   /**
-   * Cached value of `routes`. For performance, don't synchronize
-   * the value. We always use the same logic to calculate its value
-   * so it will end up consistent across threads anyway.
+   * The factory used to create requests for this application.
    */
-  private var cachedRoutes: Router = null
+  def requestFactory: RequestFactory
 
   /**
    * The HTTP request handler
@@ -130,9 +138,9 @@ trait Application {
    * The conf directory is included on the classpath, so this may be used to look up resources, relative to the conf
    * directory.
    *
-   * For example, to retrieve the conf/logger.xml configuration file:
+   * For example, to retrieve the conf/logback.xml configuration file:
    * {{{
-   * val maybeConf = application.resource("logger.xml")
+   * val maybeConf = application.resource("logback.xml")
    * }}}
    *
    * @param name the absolute name of the resource (from the classpath root)
@@ -150,9 +158,9 @@ trait Application {
    * The conf directory is included on the classpath, so this may be used to look up resources, relative to the conf
    * directory.
    *
-   * For example, to retrieve the conf/logger.xml configuration file:
+   * For example, to retrieve the conf/logback.xml configuration file:
    * {{{
-   * val maybeConf = application.resourceAsStream("logger.xml")
+   * val maybeConf = application.resourceAsStream("logback.xml")
    * }}}
    *
    * @param name the absolute name of the resource (from the classpath root)
@@ -175,6 +183,15 @@ trait Application {
    * @return The injector.
    */
   def injector: Injector = NewInstanceInjector
+
+  /**
+   * Returns true if the global application is enabled for this app. If set to false, this changes the behavior of
+   * Play.start, Play.current, and Play.maybeApplication to disallow access to the global application instance,
+   * also affecting the deprecated Play APIs that use these.
+   */
+  lazy val globalApplicationEnabled: Boolean = {
+    configuration.getOptional[Boolean](Play.GlobalAppConfigKey).getOrElse(true)
+  }
 }
 
 object Application {
@@ -207,10 +224,12 @@ object Application {
 class OptionalSourceMapper(val sourceMapper: Option[SourceMapper])
 
 @Singleton
-class DefaultApplication @Inject() (environment: Environment,
+class DefaultApplication @Inject() (
+    override val environment: Environment,
     applicationLifecycle: DefaultApplicationLifecycle,
     override val injector: Injector,
     override val configuration: Configuration,
+    override val requestFactory: RequestFactory,
     override val requestHandler: HttpRequestHandler,
     override val errorHandler: HttpErrorHandler,
     override val actorSystem: ActorSystem,
@@ -220,44 +239,49 @@ class DefaultApplication @Inject() (environment: Environment,
 
   def classloader = environment.classLoader
 
-  def mode = environment.mode
-
   def stop() = applicationLifecycle.stop()
 }
 
 /**
  * Helper to provide the Play built in components.
  */
-trait BuiltInComponents {
+trait BuiltInComponents extends I18nComponents {
   def environment: Environment
   def sourceMapper: Option[SourceMapper]
   def webCommands: WebCommands
   def configuration: Configuration
+  def applicationLifecycle: DefaultApplicationLifecycle
 
   def router: Router
 
-  lazy val injector: Injector = new SimpleInjector(NewInstanceInjector) + router + cookieSigner + csrfTokenSigner + httpConfiguration + tempFileCreator + crypto
+  lazy val injector: Injector = new SimpleInjector(NewInstanceInjector) + router + cookieSigner + csrfTokenSigner + httpConfiguration + tempFileCreator + fileMimeTypes
 
-  lazy val httpConfiguration: HttpConfiguration = HttpConfiguration.fromConfiguration(configuration)
+  lazy val playBodyParsers: PlayBodyParsers = PlayBodyParsers(httpConfiguration.parser, httpErrorHandler, materializer, tempFileCreator)
+  lazy val defaultBodyParser: BodyParser[AnyContent] = playBodyParsers.default
+  lazy val defaultActionBuilder: DefaultActionBuilder = DefaultActionBuilder(defaultBodyParser)
+
+  lazy val httpConfiguration: HttpConfiguration = HttpConfiguration.fromConfiguration(configuration, environment)
+  lazy val requestFactory: RequestFactory = new DefaultRequestFactory(httpConfiguration)
   lazy val httpRequestHandler: HttpRequestHandler = new DefaultHttpRequestHandler(router, httpErrorHandler, httpConfiguration, httpFilters: _*)
   lazy val httpErrorHandler: HttpErrorHandler = new DefaultHttpErrorHandler(environment, configuration, sourceMapper,
     Some(router))
   lazy val httpFilters: Seq[EssentialFilter] = Nil
 
-  lazy val applicationLifecycle: DefaultApplicationLifecycle = new DefaultApplicationLifecycle
   lazy val application: Application = new DefaultApplication(environment, applicationLifecycle, injector,
-    configuration, httpRequestHandler, httpErrorHandler, actorSystem, materializer)
+    configuration, requestFactory, httpRequestHandler, httpErrorHandler, actorSystem, materializer)
 
   lazy val actorSystem: ActorSystem = new ActorSystemProvider(environment, configuration, applicationLifecycle).get
   implicit lazy val materializer: Materializer = ActorMaterializer()(actorSystem)
   implicit lazy val executionContext: ExecutionContext = actorSystem.dispatcher
 
-  lazy val cryptoConfig: CryptoConfig = new CryptoConfigParser(environment, configuration).get
+  lazy val cookieSigner: CookieSigner = new CookieSignerProvider(httpConfiguration.secret).get
 
-  lazy val cookieSigner: CookieSigner = new CookieSignerProvider(cryptoConfig).get
   lazy val csrfTokenSigner: CSRFTokenSigner = new CSRFTokenSignerProvider(cookieSigner).get
-  lazy val aesCrypter: AESCrypter = new AESCrypterProvider(cryptoConfig).get
-  lazy val crypto: Crypto = new Crypto(cookieSigner, csrfTokenSigner, aesCrypter)
 
-  lazy val tempFileCreator: TemporaryFileCreator = new DefaultTemporaryFileCreator(applicationLifecycle)
+  lazy val tempFileReaper: TemporaryFileReaper = new DefaultTemporaryFileReaper(actorSystem, TemporaryFileReaperConfiguration.fromConfiguration(configuration))
+  lazy val tempFileCreator: TemporaryFileCreator = new DefaultTemporaryFileCreator(applicationLifecycle, tempFileReaper)
+
+  lazy val fileMimeTypes: FileMimeTypes = new DefaultFileMimeTypesProvider(httpConfiguration.fileMimeTypes).get
+
+  lazy val javaContextComponents = JavaHelpers.createContextComponents(messagesApi, langs, fileMimeTypes, httpConfiguration)
 }

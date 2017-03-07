@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.templates
 
@@ -9,7 +9,7 @@ import play.api.http.{ HttpEntity, Writeable }
 import play.api.mvc.Results
 import play.mvc.{ Results => JResults }
 
-object TemplatesSpec extends Specification {
+class TemplatesSpec extends Specification {
   "toHtmlArgs" should {
     "escape attribute values" in {
       PlayMagic.toHtmlArgs(Map('foo -> """bar <>&"'""")).body must_== """foo="bar &lt;&gt;&amp;&quot;&#x27;""""

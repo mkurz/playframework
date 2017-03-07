@@ -1,9 +1,10 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.mvc;
 
 import play.inject.Injector;
+import play.libs.typedmap.TypedKey;
 import play.mvc.Http.*;
 
 import java.lang.annotation.*;
@@ -15,6 +16,8 @@ import javax.inject.Inject;
  * Defines several security helpers.
  */
 public class Security {
+
+    public static final TypedKey<String> USERNAME = TypedKey.create("username");
 
     /**
      * Wraps the annotated action in an <code>AuthenticatedAction</code>.
@@ -48,15 +51,9 @@ public class Security {
                 Result unauthorized = authenticator.onUnauthorized(ctx);
                 return CompletableFuture.completedFuture(unauthorized);
             } else {
-                try {
-                    ctx.request().setUsername(username);
-                    return delegate.call(ctx).whenComplete(
-                        (result, error) -> ctx.request().setUsername(null)
-                    );
-                } catch (Exception e) {
-                    ctx.request().setUsername(null);
-                    throw e;
-                }
+                Request usernameReq = ctx.request().withAttrs(ctx.request().attrs().put(USERNAME, username));
+                Context usernameCtx = ctx.withRequest(usernameReq);
+                return delegate.call(usernameCtx);
             }
         }
 

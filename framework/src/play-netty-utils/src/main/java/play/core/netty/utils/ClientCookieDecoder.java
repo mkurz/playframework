@@ -19,7 +19,7 @@ import java.text.ParsePosition;
 import java.util.Date;
 
 /**
- * A <a href="http://tools.ietf.org/html/rfc6265">RFC6265</a> compliant cookie decoder to be used client side.
+ * A <a href="https://tools.ietf.org/html/rfc6265">RFC6265</a> compliant cookie decoder to be used client side.
  *
  * It will store the way the raw value was wrapped in {@link Cookie#setWrap(boolean)} so it can be
  * eventually sent back to the Origin server as is.
@@ -46,6 +46,7 @@ public final class ClientCookieDecoder extends CookieDecoder {
     /**
      * Decodes the specified Set-Cookie HTTP header value into a {@link Cookie}.
      *
+     * @param header    the Set-Cookie header.
      * @return the decoded {@link Cookie}
      */
     public Cookie decode(String header) {
@@ -237,7 +238,7 @@ public final class ClientCookieDecoder extends CookieDecoder {
 
         private void setMaxAge(String value) {
             try {
-                maxAge = Math.max(Integer.valueOf(value), 0);
+                maxAge = Integer.valueOf(value);
             } catch (NumberFormatException e1) {
                 // ignore failure to parse -> treat as session cookie
             }

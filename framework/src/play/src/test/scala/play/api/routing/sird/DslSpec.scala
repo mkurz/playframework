@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.routing.sird
 
 import org.specs2.mutable.Specification
 import play.core.test.FakeRequest
 
-object DslSpec extends Specification {
+class DslSpec extends Specification {
 
   "Play routing DSL" should {
 

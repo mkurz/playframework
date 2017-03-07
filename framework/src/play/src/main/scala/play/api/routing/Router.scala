@@ -1,10 +1,11 @@
 /*
- * Copyright (C) 2009-2016 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2017 Lightbend Inc. <https://www.lightbend.com>
  */
 package play.api.routing
 
+import play.api.libs.typedmap.TypedKey
 import play.api.{ Configuration, Environment }
-import play.api.mvc.{ RequestHeader, Handler }
+import play.api.mvc.{ Handler, RequestHeader }
 import play.core.j.JavaRouterAdapter
 import play.utils.Reflect
 
@@ -72,17 +73,33 @@ object Router {
     }
   }
 
+  /**
+   * Request attributes used by the router.
+   */
+  object Attrs {
+    /**
+     * Key for the [[HandlerDef]] used to handle the request.
+     */
+    val HandlerDef = TypedKey[HandlerDef]("HandlerDef")
+  }
+
   /** Tags that are added to requests by the router. */
+  @deprecated("Use Router.Attrs.HandlerDef instead", "2.6.0")
   object Tags {
     /** The verb that the router matched */
+    @deprecated("Use Router.Attrs.HandlerDef instead", "2.6.0")
     val RouteVerb = "ROUTE_VERB"
     /** The pattern that the router used to match the path */
+    @deprecated("Use Router.Attrs.HandlerDef instead", "2.6.0")
     val RoutePattern = "ROUTE_PATTERN"
     /** The controller that was routed to */
+    @deprecated("Use Router.Attrs.HandlerDef instead", "2.6.0")
     val RouteController = "ROUTE_CONTROLLER"
     /** The method on the controller that was invoked */
+    @deprecated("Use Router.Attrs.HandlerDef instead", "2.6.0")
     val RouteActionMethod = "ROUTE_ACTION_METHOD"
     /** The comments in the routes file that were above the route */
+    @deprecated("Use Router.Attrs.HandlerDef instead", "2.6.0")
     val RouteComments = "ROUTE_COMMENTS"
   }
 
@@ -119,7 +136,9 @@ trait SimpleRouter extends Router { self =>
         def routes = {
           val p = if (prefix.endsWith("/")) prefix else prefix + "/"
           val prefixed: PartialFunction[RequestHeader, RequestHeader] = {
-            case rh: RequestHeader if rh.path.startsWith(p) => rh.copy(path = rh.path.drop(p.length - 1))
+            case rh: RequestHeader if rh.path.startsWith(p) =>
+              val newPath = rh.path.drop(p.length - 1)
+              rh.withTarget(rh.target.withPath(newPath))
           }
           Function.unlift(prefixed.lift.andThen(_.flatMap(self.routes.lift)))
         }
@@ -130,11 +149,13 @@ trait SimpleRouter extends Router { self =>
   }
 }
 
-object SimpleRouter {
-  private class Impl(val routes: Router.Routes) extends SimpleRouter
+class SimpleRouterImpl(routesProvider: => Router.Routes) extends SimpleRouter {
+  def routes = routesProvider
+}
 
+object SimpleRouter {
   /**
    * Create a new simple router from the given routes
    */
-  def apply(routes: Router.Routes): Router = new Impl(routes)
+  def apply(routes: Router.Routes): Router = new SimpleRouterImpl(routes)
 }
