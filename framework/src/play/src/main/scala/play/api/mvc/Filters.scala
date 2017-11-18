@@ -44,7 +44,7 @@ trait Filter extends EssentialFilter {
   def apply(f: RequestHeader => Future[Result])(rh: RequestHeader): Future[Result]
 
   def apply(next: EssentialAction): EssentialAction = {
-    implicit val ec = mat.executionContext
+    import play.core.Execution.Implicits.trampoline
     new EssentialAction {
       def apply(rh: RequestHeader): Accumulator[ByteString, Result] = {
 
