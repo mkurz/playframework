@@ -43,4 +43,8 @@ object PlayMagicForJava extends JavaImplicitConversions {
     ctx.messages().asScala
   }
 
+  implicit def javaMessagesProvider2ScalaMessagesProvider(implicit p: play.i18n.MessagesProvider): play.api.i18n.MessagesProvider = {
+    p.asScala()
+  }
+
 }

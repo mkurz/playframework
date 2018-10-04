@@ -4,7 +4,6 @@
 
 package play.i18n;
 
-import play.api.i18n.MessagesProvider;
 import play.libs.typedmap.TypedKey;
 
 import java.util.List;
@@ -64,7 +63,7 @@ public interface Messages extends MessagesProvider {
     public play.api.i18n.Messages asScala();
 
     @Override
-    default play.api.i18n.Messages messages() {
-        return this.asScala();
+    default Messages messages() {
+        return this;
     }
 }

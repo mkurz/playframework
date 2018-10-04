@@ -261,7 +261,7 @@ case class MessagesImpl(lang: Lang, messagesApi: MessagesApi) extends Messages {
   /**
    * @return the Java version for this Messages.
    */
-  override def asJava: play.i18n.Messages = new play.i18n.MessagesImpl(lang.asJava, messagesApi.asJava)
+  override def asJava: play.i18n.MessagesProvider = new play.i18n.MessagesImpl(lang.asJava, messagesApi.asJava)
 }
 
 /**
@@ -328,11 +328,6 @@ trait Messages extends MessagesProvider {
    * @return a boolean
    */
   def isDefinedAt(key: String): Boolean
-
-  /**
-   * @return the Java version for this Messages.
-   */
-  def asJava: play.i18n.Messages
 }
 
 /**
@@ -341,6 +336,7 @@ trait Messages extends MessagesProvider {
 @implicitNotFound("An implicit MessagesProvider instance was not found.  Please see https://www.playframework.com/documentation/2.6.x/ScalaForms#Passing-MessagesProvider-to-Form-Helpers")
 trait MessagesProvider {
   def messages: Messages
+  def asJava: play.i18n.MessagesProvider
 }
 
 trait MessagesImplicits {
