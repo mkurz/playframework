@@ -19,9 +19,9 @@ import io.netty.handler.timeout.IdleStateEvent
 import play.api.http._
 import play.api.libs.streams.Accumulator
 import play.api.mvc._
+import play.api.mvc.request.RequestAttrKey
 import play.api.Application
 import play.api.Logger
-import play.core.server.Attrs
 import play.core.server.NettyServer
 import play.core.server.Server
 import play.core.server.common.ReloadCache
@@ -326,7 +326,7 @@ private[play] class PlayRequestHandler(
       Server.routeModifierDefersBodyParsing(deferBodyParsingGlobal, requestHeader)
     // Execute the action on the Play default execution context
     val actionFuture = Future(action(if (deferBodyParsing) {
-      requestHeader.addAttr(Attrs.DeferredBodyParserInvoker, invokeAction)
+      requestHeader.addAttr(RequestAttrKey.DeferredBodyParserInvoker, invokeAction)
     } else {
       requestHeader
     }))(mat.executionContext)
