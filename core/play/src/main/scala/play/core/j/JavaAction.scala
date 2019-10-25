@@ -120,7 +120,12 @@ abstract class JavaAction(val handlerComponents: JavaHandlerComponents)
         // It's totally OK to call parseBody(...) even when body parsing was not deferred because it won't do anything
         // if body was parsed already and just passes through
         FutureConverters.toJava(
-          parseBody(request.asScala(), r => FutureConverters.toScala(invocation(r.asJava)).map(_.asScala()))
+          BodyParser
+            .parseBody(
+              parser,
+              request.asScala(),
+              (r: Request[_]) => FutureConverters.toScala(invocation(r.asJava)).map(_.asScala())
+            )
             .map(_.asJava)
         )
     }
