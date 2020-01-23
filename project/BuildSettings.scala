@@ -210,6 +210,8 @@ object BuildSettings {
     }.toSet,
     mimaBinaryIssueFilters ++= Seq(
       // Add mima filters here
+      // Changed params of the PlayRequestHandler constructor, which is private[play] anyway
+      ProblemFilters.exclude[DirectMissingMethodProblem]("play.core.server.netty.PlayRequestHandler.this"),
     ),
     unmanagedSourceDirectories in Compile += {
       val suffix = CrossVersion.partialVersion(scalaVersion.value) match {
