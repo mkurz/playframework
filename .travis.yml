@@ -16,13 +16,13 @@ env:
   global:
     - secure: "NS2hMbBcmi6EF4QxtcNs4A2ZuNmIdLYQRJUWWejgnD4YtcsmoVjxrHRedqrnDdui4DyvaxWhg/3Uds23jEKTSbbh3ZphLO77BVgM2nUGUvVoa4i6qGF2eZFlIhq2G1gM700GPV7X4KmyjYi2HtH8CWBTkqP3g0An63mCZw/Gnlk="
   matrix:
-    - TRAVIS_JDK=11
+    - TRAVIS_JDK=1.11.0-6
 
 before_install:
   - curl --version # for debug purpose
   - curl -L -v --retry 5 -o jabba-install.sh https://git.io/jabba
   - bash jabba-install.sh && . ~/.jabba/jabba.sh
-install: jabba install $(jabba ls-remote "adopt@~1.$TRAVIS_JDK.0-0" --latest=patch) && jabba use "$_" && java -Xmx32m -version
+install: jabba install adopt@$TRAVIS_JDK && jabba use "$_" && java -Xmx32m -version
 
 stages:
   - validations
@@ -47,7 +47,7 @@ jobs:
           paths: "$HOME/.ivy2/local/com.typesafe.play"
     - name: "Run publishLocal on Java 8"
       script: scripts/publish-local
-      env: TRAVIS_JDK=8
+      env: TRAVIS_JDK=1.8.0-242
       workspaces:
         create:
           name: published-local-jdk8
@@ -85,27 +85,27 @@ jobs:
     # Test against Java 8, but only for Scala 2.12
     - stage: java8
       script: scripts/test-scala-212
-      env: TRAVIS_JDK=8
+      env: TRAVIS_JDK=1.8.0-242
       name: "Run tests for Scala 2.12 and Java 8"
     - script: scripts/it-test-scala-212
-      env: TRAVIS_JDK=8
+      env: TRAVIS_JDK=1.8.0-242
       name: "Run it tests for Scala 2.12 and Java 8"
     - script: scripts/test-docs-212
-      env: TRAVIS_JDK=8
+      env: TRAVIS_JDK=1.8.0-242
       name: "Run documentation tests for Scala 2.12 and Java 8"
     - name: "Run scripted tests (a) for sbt 1.x and Java 8"
       script: scripts/test-scripted 'play-sbt-plugin/*1of3'
-      env: TRAVIS_JDK=8
+      env: TRAVIS_JDK=1.8.0-242
       workspaces:
         use: published-local-jdk8
     - name: "Run scripted tests (b) for sbt 1.x and Java 8"
       script: scripts/test-scripted 'play-sbt-plugin/*2of3'
-      env: TRAVIS_JDK=8
+      env: TRAVIS_JDK=1.8.0-242
       workspaces:
         use: published-local-jdk8
     - name: "Run scripted tests (c) for sbt 1.x and Java 8"
       script: scripts/test-scripted 'play-sbt-plugin/*3of3'
-      env: TRAVIS_JDK=8
+      env: TRAVIS_JDK=1.8.0-242
       workspaces:
         use: published-local-jdk8
 
