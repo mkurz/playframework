@@ -116,7 +116,13 @@ abstract class JavaAction(val handlerComponents: JavaHandlerComponents)
     val javaRequest: JRequest = new JRequestImpl(req)
 
     val rootAction = new JAction[Any] {
-      override def call(request: JRequest): CompletionStage[JResult] = invocation(request)
+      override def call(request: JRequest): CompletionStage[JResult] =
+        // It's totally OK to call parseBody(...) even when body parsing was not deferred because it won't do anything
+        // if body was parsed already and just passes through
+        FutureConverters.toJava(
+          parseBody(request.asScala(), r => FutureConverters.toScala(invocation(r.asJava)).map(_.asScala()))
+            .map(_.asJava)
+        )
     }
 
     val baseAction = handlerComponents.actionCreator.createAction(javaRequest, annotations.method)
