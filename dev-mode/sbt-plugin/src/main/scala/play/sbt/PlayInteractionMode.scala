@@ -125,7 +125,9 @@ object PlayConsoleInteractionMode extends PlayInteractionMode {
   private def waitForKey(): Unit = {
     withConsoleReader { consoleReader =>
       def waitEOF(): Unit = {
-        consoleReader.readCharacter() match {
+        val c = consoleReader.readCharacter()
+        println(s"Character detected: $c")
+        c match {
           case 4 | 13 => // STOP on Ctrl-D or Enter
           case 11 =>
             consoleReader.clearScreen(); waitEOF()
