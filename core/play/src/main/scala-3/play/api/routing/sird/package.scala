@@ -4,6 +4,8 @@
 
 package play.api.routing
 
+import play.api.mvc.RequestHeader
+
 /**
  * The Play "String Interpolating Routing DSL", sird for short.
  *
@@ -57,48 +59,50 @@ package object sird extends RequestMethodExtractors with PathBindableExtractors 
     val p: PathExtractor = PathExtractor.cached(sc.parts)
   }
 
-  extension (inline sc: StringContext) {
+  /**
+   *
+   * See
+   * https://github.com/lampepfl/dotty/issues/8577
+   * https://github.com/lampepfl/dotty/pull/16358
+   * -> which made it into Scala 3.3.0-RC1
+   *
+   * What I did here is basically the same like shown in the test the above PR added:
+   * https://github.com/lampepfl/dotty/pull/16358/files#diff-7d4c46ab2cb40487d4e63816f21e5fc1edbc6fad5fa0945f93e5cd79fe8ead08
+   *
+   */
 
+  extension(ctx: StringContext) {
     /**
      * String interpolator for required query parameters out of query strings.
      *
      * The format must match `q"paramName=\${param}"`.
      */
-    inline def q: RequiredQueryStringParameter = ${ macroimpl.QueryStringParameterMacros.required('sc) }
+    def q: Macro.StrCtx = Macro(ctx)
+//   def `q_?`: Macro.StrCtx = Macro(ctx)
+//   def q_o: Macro.StrCtx = Macro(ctx)
+//   ...
+  }
 
-    /**
-     * String interpolator for optional query parameters out of query strings.
-     *
-     * The format must match `q_?"paramName=\${param}"`.
-     */
-    inline def q_? : OptionalQueryStringParameter = ${ macroimpl.QueryStringParameterMacros.optional('sc) }
+  extension(inline sc: Macro.StrCtx) {
+    inline def unapplySeq(rh: RequestHeader): Option[Seq[String]] = ${ macroimpl.QueryStringParameterMacros.required('sc, 'rh) }
+    // Attempt to somehow handle everything with just one unapplySeq here:
+    //inline def unapplySeq[R](rh: R): Option[Seq[_]] = ${ macroimpl.QueryStringParameterMacros.choose[R]('sc, 'rh) }
+  }
 
-    /**
-     * String interpolator for multi valued query parameters out of query strings.
-     *
-     * The format must match `q_*"paramName=\${params}"`.
-     */
-    inline def q_* : SeqQueryStringParameter = ${ macroimpl.QueryStringParameterMacros.seq('sc) }
-
-    /**
-     * String interpolator for optional query parameters out of query strings.
-     *
-     * The format must match `q_o"paramName=\${param}"`.
-     *
-     * The `q_?` interpolator is preferred, however Scala 2.10 does not support operator characters in String
-     * interpolator methods.
-     */
-    inline def q_o: OptionalQueryStringParameter = ${ macroimpl.QueryStringParameterMacros.optional('sc) }
-
-    /**
-     * String interpolator for multi valued query parameters out of query strings.
-     *
-     * The format must match `q_s"paramName=\${params}"`.
-     *
-     * The `q_*` interpolator is preferred, however Scala 2.10 does not support operator characters in String
-     * interpolator methods.
-     */
-    inline def q_s: SeqQueryStringParameter = ${ macroimpl.QueryStringParameterMacros.seq('sc) }
+  object Macro {
+    // Can't use opaque here really:
+    // From https://dotty.epfl.ch/docs/reference/other-new-features/opaques.html
+    // * "..within the scope, it is treated as a type alias, but this is opaque to the outside world where,
+    //    in consequence, .. is seen as an abstract type that has nothing to do with ..."
+    // * "In general, one can think of an opaque type as being only transparent in the scope of private[this]
+    //   (unless the type is a top level definition - in this case, it's transparent only within the file it's defined in)."
+    // -> That means in QueryStringParameterMacros.scala StrCtx and StringContext seem to be completly other types, so we can't pattern match
+    // From https://www.baeldung.com/scala/opaque-type-alias
+    // * "Opaque types don’t support pattern matching"
+    // -> Again problem for us
+    /* opaque */ type StrCtx = StringContext
+    def apply(ctx: StringContext): StrCtx = ctx
+    def unapply(ctx: StrCtx): Option[StringContext] = Some(ctx)
   }
 
   /**

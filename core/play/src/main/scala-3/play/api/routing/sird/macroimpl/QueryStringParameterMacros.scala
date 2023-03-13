@@ -8,6 +8,8 @@ package play.api.routing.sird.macroimpl
 
 import scala.quoted.*
 
+import play.api.mvc.RequestHeader
+
 import play.api.routing.sird.QueryStringParameterExtractor
 
 /**
@@ -19,16 +21,34 @@ import play.api.routing.sird.QueryStringParameterExtractor
 private[sird] object QueryStringParameterMacros {
   val paramEquals = "([^&=]+)=".r
 
-  def required(clz: Expr[StringContext])(using q: Quotes) = {
-    macroImpl(clz, "q", e => '{ QueryStringParameterExtractor.required(${ e }) })
+  def choose[R](clz: Expr[StringContext], rh: Expr[R])(using r: Type[R])(using q: Quotes) = {
+    import q.reflect.*
+
+    clz match {
+      case '{ play.api.routing.sird.q(StringContext(${ Varargs(rawParts) }*)) } =>
+        //required[RequestHeader](clz, rh)
+        macroImpl(clz, "q", e => '{ QueryStringParameterExtractor.required(${ e }).unapply(${rh.asInstanceOf[Expr[RequestHeader]]}).map(Seq(_)) })
+      //case '{ play.api.routing.sird.q_o(StringContext(${ Varargs(rawParts) }*)) } =>
+      //  optional(clz, rh)
+      //case '{ play.api.routing.sird.q_?(StringContext(${ Varargs(rawParts) }*)) } =>
+      //  optional(clz, rh)
+      // ....
+    }
   }
 
-  def optional(clz: Expr[StringContext])(using q: Quotes) = {
-    macroImpl(clz, "q_?", e => '{ QueryStringParameterExtractor.optional(${ e }) })
+  def required(clz: Expr[StringContext], rh: Expr[RequestHeader])(using q: Quotes) = {
+    macroImpl(clz, "q", e => '{ QueryStringParameterExtractor.required(${ e }).unapply(${ rh }).map(Seq(_)) })
+  }
+//  def required[T](clz: Expr[StringContext], rh: Expr[T])(using q: Quotes) = {
+//    macroImpl(clz, "q", e => '{ QueryStringParameterExtractor.required(${ e }).unapply(${ rh }).map(Seq(_)) })
+//  }
+
+  def optional(clz: Expr[StringContext], rh: Expr[RequestHeader])(using q: Quotes) = {
+    macroImpl(clz, "q_?", e => '{ QueryStringParameterExtractor.optional(${ e }).unapply(${ rh }).map(Seq(_)) })
   }
 
-  def seq(clz: Expr[StringContext])(using q: Quotes) = {
-    macroImpl(clz, "q_*", e => '{ QueryStringParameterExtractor.seq(${ e }) })
+  def seq(clz: Expr[StringContext], rh: Expr[RequestHeader])(using q: Quotes) = {
+    macroImpl(clz, "q_*", e => '{ QueryStringParameterExtractor.seq(${ e }).unapply(${ rh }).map(Seq(_)) })
   }
 
   def macroImpl[E](sc: Expr[StringContext], name: String, fn: Expr[String] => Expr[E])(using q: Quotes): Expr[E] = {
@@ -40,7 +60,7 @@ private[sird] object QueryStringParameterMacros {
     }
 
     sc match {
-      case '{ StringContext(${ Varargs(rawParts) }*) } =>
+      case '{ play.api.routing.sird.q(StringContext(${ Varargs(rawParts) }*)) } =>
         val parts: Seq[String] = Expr.ofSeq(rawParts).valueOrAbort
 
         if (parts.sizeIs <= 0) {
