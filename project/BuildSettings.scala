@@ -211,7 +211,7 @@ object BuildSettings {
       (organization.value %% moduleName.value % version).cross(cross)
     }.toSet,
     mimaBinaryIssueFilters ++= Seq(
-      // Upgrade to Twirl 1.6.6:
+      // Upgrade to Twirl 2.0.5:
       // It's not necessary to mixin the Template[0-22] trait(s) into a Twirl template anymore when using Scala 3.
       // In Scala 2 this is just done to raise a meaningful exception when more than 22 arguments were passed to the template (which Scala 2 does not support).
       // Since Scala 3 does support more than 22 args, we can just remove the trait(s) from the generated Twirl Scala code.
