@@ -29,6 +29,7 @@ jobs:
       - name: Set current timestamp (to the minute)
         run: echo "TIMESTAMP_MINUTE=$(date +'%Y-%m-%d %H-%M')" >> $GITHUB_ENV
       - uses: mkurz/sbt-dependency-submission@overrides # for root project
+        id: submit-root-build
         with:
           correlator: '${{ github.workflow }}_${{ github.job }}_${{ github.action }}-branch_${{ github.ref_name }}'
           manifest-override: '${{ env.TIMESTAMP_MINUTE }} [${{ github.ref_name}}] build.sbt'
@@ -36,7 +37,10 @@ jobs:
           sha-override: 'c777436a26358f81dbfbd3e715d7a128bffa4427'
           ref-override: 'refs/heads/main' #  2025-02-27: GitHub ignores it, but to be future-proof, let's hardcode it (not using github.event.repository.default_branch)
           sbt-plugin-version: '3.3.0-SNAPSHOT'
+      - name: Log dependency snapshot for build.sbt
+        run: cat ${{ steps.submit-root-build.outputs.snapshot-json-path }} | jq
       - uses: mkurz/sbt-dependency-submission@overrides
+        id: submit-documentation-build
         with:
           working-directory: './documentation/'
           correlator: '${{ github.workflow }}_${{ github.job }}_${{ github.action }}-branch_${{ github.ref_name }}'
@@ -45,3 +49,5 @@ jobs:
           sha-override: 'c777436a26358f81dbfbd3e715d7a128bffa4427'
           ref-override: 'refs/heads/main' #  2025-02-27: GitHub ignores it, but to be future-proof, let's hardcode it (not using github.event.repository.default_branch)
           sbt-plugin-version: '3.3.0-SNAPSHOT'
+      - name: Log dependency snapshot for documentation/build.sbt
+        run: cat ${{ steps.submit-documentation-build.outputs.snapshot-json-path }} | jq
