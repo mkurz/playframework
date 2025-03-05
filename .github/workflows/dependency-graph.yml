@@ -37,6 +37,7 @@ jobs:
           sha-override: 'c777436a26358f81dbfbd3e715d7a128bffa4427'
           ref-override: 'refs/heads/main' #  2025-02-27: GitHub ignores it, but to be future-proof, let's hardcode it (not using github.event.repository.default_branch)
           configs-ignore: provided optional compile-internal test-internal runtime-internal scala-tool scala-doc-tool scripted-sbt scripted-sbt-launch jmh webjars
+          modules-ignore: play-framework_2.13 play-framework_3 play-bom_2.13 play-bom_3 play-documentation_2.13 play-documentation_3 play-integration-test_2.13 play-integration-test_3 play-microbenchmark_2.13 play-microbenchmark_3
           sbt-plugin-version: '3.3.0-SNAPSHOT'
       - name: Log dependency snapshot for build.sbt
         run: cat ${{ steps.submit-root-build.outputs.snapshot-json-path }} | jq
@@ -50,6 +51,7 @@ jobs:
           sha-override: 'c777436a26358f81dbfbd3e715d7a128bffa4427'
           ref-override: 'refs/heads/main' #  2025-02-27: GitHub ignores it, but to be future-proof, let's hardcode it (not using github.event.repository.default_branch)
           configs-ignore: provided optional compile-internal test-internal runtime-internal scala-tool scala-doc-tool scripted-sbt scripted-sbt-launch jmh webjars
+          modules-ignore: play-framework_2.13 play-framework_3 play-bom_2.13 play-bom_3 play-documentation_2.13 play-documentation_3 play-integration-test_2.13 play-integration-test_3 play-microbenchmark_2.13 play-microbenchmark_3
           sbt-plugin-version: '3.3.0-SNAPSHOT'
       - name: Log dependency snapshot for documentation/build.sbt
         run: cat ${{ steps.submit-documentation-build.outputs.snapshot-json-path }} | jq
