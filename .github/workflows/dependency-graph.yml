@@ -36,6 +36,7 @@ jobs:
           # By hardcoding the sha and ref, we ensure that all branches update the same snapshots, differing only by their correlator.
           sha-override: 'c777436a26358f81dbfbd3e715d7a128bffa4427'
           ref-override: 'refs/heads/main' #  2025-02-27: GitHub ignores it, but to be future-proof, let's hardcode it (not using github.event.repository.default_branch)
+          configs-ignore: provided optional compile-internal
           sbt-plugin-version: '3.3.0-SNAPSHOT'
       - name: Log dependency snapshot for build.sbt
         run: cat ${{ steps.submit-root-build.outputs.snapshot-json-path }} | jq
@@ -48,6 +49,7 @@ jobs:
           # By hardcoding the sha and ref, we ensure that all branches update the same snapshots, differing only by their correlator.
           sha-override: 'c777436a26358f81dbfbd3e715d7a128bffa4427'
           ref-override: 'refs/heads/main' #  2025-02-27: GitHub ignores it, but to be future-proof, let's hardcode it (not using github.event.repository.default_branch)
+          configs-ignore: provided optional compile-internal
           sbt-plugin-version: '3.3.0-SNAPSHOT'
       - name: Log dependency snapshot for documentation/build.sbt
         run: cat ${{ steps.submit-documentation-build.outputs.snapshot-json-path }} | jq
