@@ -28,20 +28,20 @@ jobs:
       - uses: sbt/setup-sbt@v1
       - name: Set current timestamp (to the minute)
         run: echo "TIMESTAMP_MINUTE=$(date +'%Y-%m-%d %H-%M')" >> $GITHUB_ENV
-      - uses: mkurz/sbt-dependency-submission@manifest-prefix # for root project
+      - uses: mkurz/sbt-dependency-submission@overrides # for root project
         with:
           correlator: '${{ github.workflow }}_${{ github.job }}_${{ github.action }}-branch_${{ github.ref_name }}'
-          manifest-prefix: '${{ env.TIMESTAMP_MINUTE }} [${{ github.ref_name}}] '
+          manifest-override: '${{ env.TIMESTAMP_MINUTE }} [${{ github.ref_name}}] build.sbt'
           # By hardcoding the sha and ref, we ensure that all branches update the same snapshots, differing only by their correlator.
           sha-override: 'c777436a26358f81dbfbd3e715d7a128bffa4427'
           ref-override: 'refs/heads/main' #  2025-02-27: GitHub ignores it, but to be future-proof, let's hardcode it (not using github.event.repository.default_branch)
-          sbt-plugin-version: '3.2.0-SNAPSHOT'
-      - uses: mkurz/sbt-dependency-submission@manifest-prefix
+          sbt-plugin-version: '3.3.0-SNAPSHOT'
+      - uses: mkurz/sbt-dependency-submission@overrides
         with:
           working-directory: './documentation/'
           correlator: '${{ github.workflow }}_${{ github.job }}_${{ github.action }}-branch_${{ github.ref_name }}'
-          manifest-prefix: '${{ env.TIMESTAMP_MINUTE }} [${{ github.ref_name}}] '
+          manifest-override: '${{ env.TIMESTAMP_MINUTE }} [${{ github.ref_name}}] documentation/build.sbt'
           # By hardcoding the sha and ref, we ensure that all branches update the same snapshots, differing only by their correlator.
           sha-override: 'c777436a26358f81dbfbd3e715d7a128bffa4427'
           ref-override: 'refs/heads/main' #  2025-02-27: GitHub ignores it, but to be future-proof, let's hardcode it (not using github.event.repository.default_branch)
-          sbt-plugin-version: '3.2.0-SNAPSHOT'
+          sbt-plugin-version: '3.3.0-SNAPSHOT'
